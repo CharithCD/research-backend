@@ -1,18 +1,24 @@
+# API
 fastapi==0.114.2
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 pydantic==2.8.2
 pydantic-settings==2.4.0
+
+# ML / ASR / NLP
 transformers==4.46.3
-accelerate==0.34.2
-soundfile==0.12.1
-numpy==1.26.4
-scipy==1.13.1
+# accelerate is optional; remove if not using it explicitly
+# accelerate==0.34.2
 faster-whisper==1.0.3
 g2p_en==2.1.0
 rapidfuzz==3.9.6
 
-SQLAlchemy[asyncio]==2.0.32
-aiosqlite==0.20.0      # dev (SQLite)
-asyncpg==0.29.0        # prod (Postgres)
+# Audio / numeric
+soundfile==0.12.1
+numpy==1.26.4
+scipy==1.13.1
 
+# DB (SQLite now, Postgres later)
+SQLAlchemy[asyncio]==2.0.32
+aiosqlite==0.20.0
+asyncpg==0.29.0

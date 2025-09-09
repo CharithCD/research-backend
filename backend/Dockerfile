@@ -1,20 +1,30 @@
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1     PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/root/.cache/huggingface
 
-# System deps for audio and Whisper
-RUN apt-get update && apt-get install -y --no-install-recommends     libsndfile1 ffmpeg git libgomp1 &&     rm -rf /var/lib/apt/lists/*
+# Minimal system deps + s3cmd (for DigitalOcean Spaces)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 ffmpeg git s3cmd && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --upgrade pip &&     pip install -r requirements.txt &&     pip install --index-url https://download.pytorch.org/whl/cpu torch==2.3.1
+# Install CPU-only torch first (prevents heavy CUDA wheels)
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r /app/requirements.txt
 
-COPY app ./app
+# App code (expects this Dockerfile at backend/ and build context = repo root)
+COPY backend /app
 
-EXPOSE 8000
+# Bootstrap script will fetch model from DO Spaces on container start
+RUN chmod +x /app/bootstrap_model.sh
 
-# ... your existing Dockerfile ...
+# Preload NLTK assets used by g2p_en
 RUN python - <<'PY'
 import nltk, os
 os.makedirs("/root/nltk_data", exist_ok=True)
@@ -23,4 +33,8 @@ nltk.download('cmudict', download_dir='/root/nltk_data')
 PY
 ENV NLTK_DATA=/root/nltk_data
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+EXPOSE 8000
+
+# Pull model if missing, then run API
+CMD /app/bootstrap_model.sh && \
+    uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
