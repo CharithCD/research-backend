@@ -22,19 +22,19 @@
 #   data:
 services:
   api:
-    build: ./backend
-    container_name: research_api
+    build:
+      context: .                 # 👈 build from repo root
+      dockerfile: backend/Dockerfile
+    image: research-backend:prod
     env_file: .env
     ports:
       - "8000:8000"
-    restart: unless-stopped
     environment:
-      HF_HOME: /root/.cache/huggingface
       NLTK_DATA: /root/nltk_data
+      HF_HOME: /root/.cache/huggingface
     volumes:
-      - hf_cache:/root/.cache/huggingface   # cache HF weights
-      - data:/app/data                      # persist SQLite DB
-
+      - hf_cache:/root/.cache/huggingface
+      - data:/app/data
 volumes:
   hf_cache:
   data:
