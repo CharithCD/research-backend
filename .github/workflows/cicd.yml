@@ -74,7 +74,7 @@ services:
 volumes:
   hf_cache:
   data:
-YAML
+YAML'
 
             # keep DOCKERHUB_USERNAME in an .env file for compose substitution
             if ! grep -q '^DOCKERHUB_USERNAME=' .env.prod 2>/dev/null; then
