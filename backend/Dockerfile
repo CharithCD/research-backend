@@ -33,6 +33,11 @@ nltk.download('cmudict', download_dir='/root/nltk_data')
 PY
 ENV NLTK_DATA=/root/nltk_data
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 ffmpeg git s3cmd && \
+    rm -rf /var/lib/apt/lists/*
+
+
 EXPOSE 8000
 
 # Pull model if missing, then run API
