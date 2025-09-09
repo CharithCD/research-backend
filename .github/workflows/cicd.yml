@@ -45,41 +45,40 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            set -e
+            set -Eeuo pipefail
             mkdir -p /opt/research-backend
             cd /opt/research-backend
 
-            # ensure docker & compose are available; adjust if you already installed
             docker --version
             docker compose version
 
-            # Write/update docker-compose.yml (idempotent)
-            cat > docker-compose.yml <<'YAML'
-services:
-  api:
-    image: ${DOCKERHUB_USERNAME}/research-backend:main
-    container_name: research_backend_api
-    env_file:
-      - .env.prod
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-    environment:
-      HF_HOME: /root/.cache/huggingface
-      NLTK_DATA: /root/nltk_data
-    volumes:
-      - hf_cache:/root/.cache/huggingface
-      - data:/app/data
-    command: ["sh","-lc","/app/bootstrap_model.sh && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
-volumes:
-  hf_cache:
-  data:
-YAML'
+            # Write/update docker-compose.yml (idempotent).
+            # NOTE: this uses <<-'YAML' so the *tabs* before the closing YAML are allowed.
+            cat > docker-compose.yml <<-'YAML'
+            services:
+              api:
+                image: ${DOCKERHUB_USERNAME}/research-backend:main
+                container_name: research_backend_api
+                env_file:
+                  - .env.prod
+                ports:
+                  - "8000:8000"
+                restart: unless-stopped
+                environment:
+                  HF_HOME: /root/.cache/huggingface
+                  NLTK_DATA: /root/nltk_data
+                volumes:
+                  - hf_cache:/root/.cache/huggingface
+                  - data:/app/data
+                command: ["sh","-lc","/app/bootstrap_model.sh && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
+            volumes:
+              hf_cache:
+              data:
+            YAML
 
-            # keep DOCKERHUB_USERNAME in an .env file for compose substitution
-            if ! grep -q '^DOCKERHUB_USERNAME=' .env.prod 2>/dev/null; then
+            # Keep DOCKERHUB_USERNAME in .env.prod for compose substitution
+            grep -q '^DOCKERHUB_USERNAME=' .env.prod 2>/dev/null || \
               echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env.prod
-            fi
 
             docker compose pull
             docker compose up -d
