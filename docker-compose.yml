@@ -1,0 +1,22 @@
+services:
+  api:
+    build: ./backend
+    container_name: simple_gec_api
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      # Optional: uncomment to see HF download logs
+      # TRANSFORMERS_VERBOSITY: info
+      NLTK_DATA: /root/nltk_data
+    volumes:
+      - ./backend/app:/app/app            # live code (no rebuilds for code)
+      - hf_cache:/root/.cache/huggingface # persist model weights
+      - data:/app/data
+    command: ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--workers","1"]
+
+volumes:
+  hf_cache:
+  data:

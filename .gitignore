@@ -1,0 +1,34 @@
+# Ignore model folder
+backend/app/model/
+
+# Python cache and environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+ENV/
+
+# Database files
+backend/app/data/*.db
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Log files
+*.log
+
+# Docker
+*.pid
+*.pid.lock
+
+# Jupyter Notebooks
+*.ipynb_checkpoints
+
+# Ignore requirements.txt lock files
+requirements*.lock
