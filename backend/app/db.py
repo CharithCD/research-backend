@@ -3,7 +3,8 @@ import os, json, datetime as dt, hashlib
 from pathlib import Path
 from typing import Any, Dict
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
+from sqlalchemy.dialects.postgresql import JSONB
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///app/data/app.db")
 
@@ -92,27 +93,43 @@ async def init_db():
 async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str, Any]):
     audio_sha = hashlib.sha256(audio_bytes).hexdigest()
     now = dt.datetime.utcnow()
+
     if _is_pg():
         sql = text("""
           INSERT INTO phoneme_results
           (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, created_at)
-          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones::jsonb, :ref_phones::jsonb, :ops_raw::jsonb, :per_strict, :per_sle, :created_at)
-        """)
+          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :created_at)
+        """).bindparams(
+            bindparam("pred_phones", type_=JSONB),
+            bindparam("ref_phones", type_=JSONB),
+            bindparam("ops_raw", type_=JSONB),
+        )
+        payload = dict(
+            user_id=user_id,
+            audio_sha256=audio_sha,
+            ref_text=(result.get("ref") or {}).get("text"),
+            pred_phones=result.get("pred_phones", []),                      # <— Python list
+            ref_phones=(result.get("ref") or {}).get("phones"),             # <— Python list | None
+            ops_raw=(result.get("align") or {}).get("ops_raw"),             # <— Python list | None
+            per_strict=(result.get("align") or {}).get("per_strict"),
+            per_sle=(result.get("sle") or {}).get("per_sle"),
+            created_at=now,
+        )
     else:
         sql = text("""
           INSERT INTO phoneme_results
           (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, created_at)
           VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :created_at)
         """)
-    payload = dict(
-        user_id=user_id,
-        audio_sha256=audio_sha,
-        ref_text=(result.get("ref") or {}).get("text"),
-        pred_phones=json.dumps(result.get("pred_phones", [])),
-        ref_phones=json.dumps((result.get("ref") or {}).get("phones")),
-        ops_raw=json.dumps((result.get("align") or {}).get("ops_raw")),
-        per_strict=(result.get("align") or {}).get("per_strict"),
-        per_sle=(result.get("sle") or {}).get("per_sle"),
+        payload = dict(
+            user_id=user_id,
+            audio_sha256=audio_sha,
+            ref_text=(result.get("ref") or {}).get("text"),
+            pred_phones=json.dumps(result.get("pred_phones", [])),          # <— TEXT JSON for SQLite
+            ref_phones=json.dumps((result.get("ref") or {}).get("phones")),
+            ops_raw=json.dumps((result.get("align") or {}).get("ops_raw")),
+            per_strict=(result.get("align") or {}).get("per_strict"),
+            per_sle=(result.get("sle") or {}).get("per_sle"),
         created_at=now,
     )
     async with Session() as s:
@@ -123,29 +140,44 @@ async def save_grammar_result(user_id: str, input_text: str, result: Dict[str, A
     text_sha = hashlib.sha256(input_text.encode("utf-8")).hexdigest()
     now = dt.datetime.utcnow()
     gec = result.get("gec") or {}
+
     if _is_pg():
         sql = text("""
           INSERT INTO grammar_results
           (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, created_at)
-          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits::jsonb, :guardrails::jsonb, :latency_ms, :created_at)
-        """)
+          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :created_at)
+        """).bindparams(
+            bindparam("edits", type_=JSONB),
+            bindparam("guardrails", type_=JSONB),
+        )
+        payload = dict(
+            user_id=user_id,
+            text_sha256=text_sha,
+            input_text=result.get("input") or input_text,
+            raw_corrected=gec.get("raw_corrected"),
+            final_text=gec.get("final_text"),
+            edits=gec.get("edits"),                      # <— Python list
+            guardrails=result.get("guardrails"),         # <— Python list
+            latency_ms=(result.get("metrics") or {}).get("latency_ms"),
+            created_at=now,
+        )
     else:
         sql = text("""
           INSERT INTO grammar_results
           (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, created_at)
           VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :created_at)
         """)
-    payload = dict(
-        user_id=user_id,
-        text_sha256=text_sha,
-        input_text=result.get("input") or input_text,
-        raw_corrected=gec.get("raw_corrected"),
-        final_text=gec.get("final_text"),
-        edits=json.dumps(gec.get("edits")),
-        guardrails=json.dumps(result.get("guardrails")),
-        latency_ms=(result.get("metrics") or {}).get("latency_ms"),
-        created_at=now,
-    )
+        payload = dict(
+            user_id=user_id,
+            text_sha256=text_sha,
+            input_text=result.get("input") or input_text,
+            raw_corrected=gec.get("raw_corrected"),
+            final_text=gec.get("final_text"),
+            edits=json.dumps(gec.get("edits")),          # <— TEXT JSON for SQLite
+            guardrails=json.dumps(result.get("guardrails")),
+            latency_ms=(result.get("metrics") or {}).get("latency_ms"),
+            created_at=now,
+        )
     async with Session() as s:
         await s.execute(sql, payload)
         await s.commit()
