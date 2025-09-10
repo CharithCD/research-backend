@@ -1,0 +1,9 @@
+:80 {
+    encode gzip
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "*"
+    }
+    reverse_proxy api:8000
+}

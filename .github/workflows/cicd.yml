@@ -33,8 +33,25 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/research-backend:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/research-backend:buildcache,mode=max
 
-  deploy:
+  # NEW: copy the Caddyfile (and anything else from repo you want) to the droplet
+  upload-configs:
     needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload Caddyfile to droplet
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "Caddyfile"
+          target: "/opt/research-backend"
+          strip_components: 0
+
+  deploy:
+    needs: upload-configs
     runs-on: ubuntu-latest
     steps:
       - name: Deploy on droplet
@@ -52,8 +69,7 @@ jobs:
             docker --version
             docker compose version
 
-            # Write/update docker-compose.yml (idempotent).
-            # NOTE: this uses <<-'YAML' so the *tabs* before the closing YAML are allowed.
+            # Write/replace docker-compose.yml (references ./Caddyfile that we uploaded)
             cat > docker-compose.yml <<-'YAML'
             services:
               api:
@@ -61,8 +77,6 @@ jobs:
                 container_name: research_backend_api
                 env_file:
                   - .env.prod
-                ports:
-                  - "8000:8000"
                 restart: unless-stopped
                 environment:
                   HF_HOME: /root/.cache/huggingface
@@ -71,15 +85,39 @@ jobs:
                   - hf_cache:/root/.cache/huggingface
                   - data:/app/data
                 command: ["sh","-lc","/app/bootstrap_model.sh && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
+
+              caddy:
+                image: caddy:2-alpine
+                container_name: research_backend_caddy
+                restart: unless-stopped
+                ports:
+                  - "80:80"       # your current Caddyfile listens on :80
+                  # - "443:443"   # enable later when you add TLS
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                  - caddy-data:/data
+                  - caddy-config:/config
+                depends_on:
+                  - api
+
             volumes:
               hf_cache:
               data:
+              caddy-data:
+              caddy-config:
             YAML
 
-            # Keep DOCKERHUB_USERNAME in .env for compose substitution
-            grep -q '^DOCKERHUB_USERNAME=' .env 2>/dev/null || \
-              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env
+            # Keep DOCKERHUB_USERNAME available for compose substitution
+            grep -q '^DOCKERHUB_USERNAME=' .env.prod 2>/dev/null || \
+              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env.prod
 
+            # Ensure .env.prod exists (edit on server if needed)
+            if [ ! -f .env.prod ]; then
+              echo "ERROR: .env.prod is missing on server (/opt/research-backend)."
+              exit 1
+            fi
+
+            # Bring it up
             docker compose pull
             docker compose up -d
             docker compose ps
