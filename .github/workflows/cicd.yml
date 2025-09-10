@@ -76,9 +76,9 @@ jobs:
               data:
             YAML
 
-            # Keep DOCKERHUB_USERNAME in .env.prod for compose substitution
-            grep -q '^DOCKERHUB_USERNAME=' .env.prod 2>/dev/null || \
-              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env.prod
+            # Keep DOCKERHUB_USERNAME in .env for compose substitution
+            grep -q '^DOCKERHUB_USERNAME=' .env 2>/dev/null || \
+              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env
 
             docker compose pull
             docker compose up -d
