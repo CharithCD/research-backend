@@ -90,15 +90,16 @@ jobs:
                 image: caddy:2-alpine
                 container_name: research_backend_caddy
                 restart: unless-stopped
+                depends_on:
+                  - api
                 ports:
-                  - "80:80"       # your current Caddyfile listens on :80
-                  # - "443:443"   # enable later when you add TLS
+                  - "80:80"
+                  # - "443:443"  # enable later when you add TLS
                 volumes:
                   - ./Caddyfile:/etc/caddy/Caddyfile:ro
                   - caddy-data:/data
                   - caddy-config:/config
-                depends_on:
-                  - api
+                command: ["caddy","run","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"]
 
             volumes:
               hf_cache:
