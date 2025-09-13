@@ -9,7 +9,7 @@ from .utils_gec import GEC
 from .utils_phone import run_phoneme
 from .db import init_db, save_phoneme_result, save_grammar_result, fetch_user_results
 
-app = FastAPI(title="Tiny Speech→GEC Backend", version="0.1.3")
+app = FastAPI(title="Tiny Speech→GEC Backend", version="0.1.4")
 settings = get_settings()
 
 app.add_middleware(
@@ -80,3 +80,47 @@ async def phoneme_align(
 async def get_user_results(user_id: str, limit: int = Query(50, ge=1, le=500)):
     data = await fetch_user_results(user_id=user_id, limit=limit)
     return UserResultsOut(user_id=user_id, **data)
+
+@app.post("/analyze/both")
+async def analyze_both(
+    file: UploadFile = File(...),
+    text: str = Form(...),                 # the sentence to compare for phonemes AND to run GEC on
+    user_id: str | None = Form(None),
+    sle_mode: bool = Form(True),
+    return_edits: bool = Form(True),
+):
+    """
+    Returns BOTH:
+      - phoneme alignment (pred vs ref_text = 'text')
+      - grammar correction over the same 'text'
+    Also persists both results if user_id provided.
+    """
+    assert _gec is not None, "GEC model not loaded"
+
+    audio = await file.read()
+
+    # 1) Phoneme alignment (audio vs provided text)
+    phoneme_result = run_phoneme(audio, ref_text=text)
+
+    # 2) Grammar correction on the provided text
+    grammar_result = _gec.respond(
+        text, sle_mode=sle_mode, return_edits=return_edits
+    )
+
+    # 3) Persist (optional)
+    # These helpers are the ones you already added in db.py
+    try:
+        if user_id:
+            from .db import save_phoneme_result, save_grammar_result
+            # store separately so each table row stands alone
+            await save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)
+            await save_grammar_result(user_id=user_id, input_text=text, result=grammar_result)
+    except Exception as e:
+        # Don't fail the request if DB write has issues; just return data.
+        print(f"[WARN] DB save failed: {e}")
+
+    return {
+        "input": {"text": text, "has_audio": True},
+        "phoneme": phoneme_result,
+        "grammar": grammar_result,
+    }
