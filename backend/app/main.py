@@ -54,32 +54,34 @@ async def health():
 
 def format_analytics_response(data) -> dict:
     return {
-        "user_id": data["user_id"],
-        "window": data["window_label"],
-        "range": {"from_ts": data["from_ts"].isoformat(), "to_ts": data["to_ts"].isoformat()},
-        "attempts": {"phoneme": data["attempts_phoneme"], "grammar": data["attempts_grammar"]},
+        "user_id": data.user_id,
+        "window": data.window_label,
+        "range": {"from_ts": data.from_ts.isoformat(), "to_ts": data.to_ts.isoformat()},
+        "attempts": {"phoneme": data.attempts_phoneme, "grammar": data.attempts_grammar},
         "pronunciation": {
-            "avg_per_sle": data["per_sle_avg"],
-            "median_per_sle": data["per_sle_median"],
-            "top_phone_subs": data["top_phone_subs"],
+            "avg_per_sle": data.per_sle_avg,
+            "median_per_sle": data.per_sle_median,
+            "top_phone_subs": json.loads(data.top_phone_subs) if isinstance(data.top_phone_subs, str) else data.top_phone_subs,
         },
-        "grammar": {"edits_per_100w_avg": data["edits_per_100w_avg"], "latency_ms_p50": data["latency_ms_p50"]},
-        "badge": data["badge"],
-        "headline_msg": data["headline_msg"],
-        "updated_at": data["updated_at"].isoformat(),
-        "expires_at": data["expires_at"].isoformat(),
+        "grammar": {"edits_per_100w_avg": data.edits_per_100w_avg, "latency_ms_p50": data.latency_ms_p50},
+        "badge": data.badge,
+        "headline_msg": data.headline_msg,
+        "updated_at": data.updated_at.isoformat(),
+        "expires_at": data.expires_at.isoformat(),
     }
 
 @app.get("/analytics/{user_id}", response_model=AnalyticsOut)
 async def get_analytics(user_id: str, force: bool = False):
     if not force:
         cached_data = await db.get_user_analytics_cache(user_id)
-        if cached_data and cached_data["expires_at"] > dt.datetime.utcnow():
+        if cached_data and cached_data.expires_at.replace(tzinfo=None) > dt.datetime.utcnow():
             return format_analytics_response(cached_data)
     
     analytics_data = await compute_last7d(user_id)
     await db.upsert_user_analytics_cache(analytics_data)
-    return format_analytics_response(analytics_data)
+    # Re-fetch from DB to get a consistent row object
+    newly_cached_data = await db.get_user_analytics_cache(user_id)
+    return format_analytics_response(newly_cached_data)
 
 @app.post("/analytics/{user_id}/recompute", response_model=AnalyticsOut)
 async def recompute_analytics(user_id: str, background_tasks: BackgroundTasks):
