@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     WHISPER_SIZE: str = "tiny"
     GEC_MODEL_ID: str = "vennify/t5-base-grammar-correction"
     HUGGINGFACE_TOKEN: str | None = None
+    OPENAI_API_KEY: str | None = None
 
     class Config:
         env_file = ".env"
