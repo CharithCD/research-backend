@@ -8,6 +8,16 @@ import torch
 from transformers import AutoFeatureExtractor, AutoModelForCTC
 from g2p_en import G2p
 from rapidfuzz.distance import Levenshtein as L
+from unidecode import unidecode
+import re, inflect
+NUM = inflect.engine()
+
+def norm_text(s: str) -> str:
+    s = unidecode((s or "")).lower()                                    # ASCII fold + lowercase
+    s = re.sub(r"\d+", lambda m: NUM.number_to_words(m.group()).replace("-", " "), s)  # 123 -> "one two three"
+    s = re.sub(r"[^a-z' ]+", " ", s)                                    # drop everything except a–z, space, apostrophe
+    s = re.sub(r"\s+", " ", s).strip()                                  # collapse spaces
+    return s
 
 # Keep CPU predictable on small machines
 torch.set_num_threads(max(1, torch.get_num_threads()))
@@ -114,6 +124,7 @@ def _decode_ids(ids: List[int], id2sym: Dict[int, str], blank_id: int) -> List[s
 
 def _g2p_arpabet(text: str, g2p: G2p) -> List[str]:
     """ARPAbet-like phones uppercased, stress digits stripped."""
+    text = norm_text(text)
     out: List[str] = []
     for ph in g2p(text):
         if not ph or ph == " ":

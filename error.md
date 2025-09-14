@@ -1,57 +1,88 @@
-research_backend_api    |   File "/app/app/main.py", line 57, in format_analytics_response
-research_backend_api    |     "user_id": data.user_id,
-research_backend_api    |                ^^^^^^^^^^^^
-research_backend_api    | AttributeError: 'dict' object has no attribute 'user_id'
-research_backend_api    | INFO:     172.18.0.3:53504 - "POST /analytics/test123/recompute HTTP/1.1" 500 Internal Server Error
-research_backend_api    | ERROR:    Exception in ASGI application
-research_backend_api    | Traceback (most recent call last):
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 401, in run_asgi
-research_backend_api    |     result = await app(  # type: ignore[func-returns-value]
-research_backend_api    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 70, in __call__
-research_backend_api    |     return await self.app(scope, receive, send)
-research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
-research_backend_api    |     await super().__call__(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/applications.py", line 113, in __call__
-research_backend_api    |     await self.middleware_stack(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 187, in __call__
-research_backend_api    |     raise exc
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 165, in __call__
-research_backend_api    |     await self.app(scope, receive, _send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 85, in __call__
-research_backend_api    |     await self.app(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
-research_backend_api    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 62, in wrapped_app
-research_backend_api    |     raise exc
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 51, in wrapped_app
-research_backend_api    |     await app(scope, receive, sender)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 715, in __call__
-research_backend_api    |     await self.middleware_stack(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 735, in app
-research_backend_api    |     await route.handle(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 288, in handle
-research_backend_api    |     await self.app(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 76, in app
-research_backend_api    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 62, in wrapped_app
-research_backend_api    |     raise exc
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 51, in wrapped_app
-research_backend_api    |     await app(scope, receive, sender)
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 73, in app
-research_backend_api    |     response = await f(request)
-research_backend_api    |                ^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 301, in app
-research_backend_api    |     raw_response = await run_endpoint_function(
-research_backend_api    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 212, in run_endpoint_function
-research_backend_api    |     return await dependant.call(**values)
-research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/app/app/main.py", line 90, in recompute_analytics
-research_backend_api    |     return format_analytics_response(analytics_data)
-research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/app/app/main.py", line 57, in format_analytics_response
-research_backend_api    |     "user_id": data.user_id,
-research_backend_api    |                ^^^^^^^^^^^^
-research_backend_api    | AttributeError: 'dict' object has no attribute 'user_id'
+{
+    "input": {
+        "text": "He was happy.",
+        "has_audio": true,
+        "transcribed_text": "He was happy."
+    },
+    "phoneme": {
+        "pred_phones": [
+            "HH",
+            "IY",
+            "W",
+            "AA",
+            "Z",
+            "HH",
+            "AE",
+            "P",
+            "IY"
+        ],
+        "ref": {
+            "text": "He was happy.",
+            "phones": [
+                "HH",
+                "IY",
+                "W",
+                "AA",
+                "Z",
+                "HH",
+                "AE",
+                "P",
+                "IY",
+                "."
+            ]
+        },
+        "align": {
+            "ops_raw": [
+                {
+                    "op": "D",
+                    "g": ".",
+                    "p": null,
+                    "i": 9,
+                    "j": 9
+                }
+            ],
+            "per_strict": 10.0
+        },
+        "sle": {
+            "ops_after_rules": [
+                {
+                    "op": "D",
+                    "g": ".",
+                    "p": null,
+                    "i": 9,
+                    "j": 9
+                }
+            ],
+            "dropped_by_rules": [],
+            "per_sle": 10.0
+        }
+    },
+    "grammar": {
+        "id": "utt_b46af085",
+        "input": "He was happy.",
+        "model": {
+            "hf_id": "vennify/t5-base-grammar-correction",
+            "device": "cpu"
+        },
+        "gec": {
+            "raw_corrected": "He was happy.",
+            "edits": [],
+            "final_text": "He was happy."
+        },
+        "guardrails": [],
+        "metrics": {
+            "latency_ms": 1048
+        }
+    }
+}
+
+from unidecode import unidecode
+import re, inflect
+NUM = inflect.engine()
+
+def norm_text(s: str) -> str:
+    s = unidecode((s or "")).lower()                                    # ASCII fold + lowercase
+    s = re.sub(r"\d+", lambda m: NUM.number_to_words(m.group()).replace("-", " "), s)  # 123 -> "one two three"
+    s = re.sub(r"[^a-z' ]+", " ", s)                                    # drop everything except a–z, space, apostrophe
+    s = re.sub(r"\s+", " ", s).strip()                                  # collapse spaces
+    return s
