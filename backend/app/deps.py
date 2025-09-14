@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     HUGGINGFACE_TOKEN: str | None = None
     OPENAI_API_KEY: str | None = None
 
+    # Analytics
+    ANALYTICS_CACHE_TTL_HOURS: int = 24
+    TIMEZONE: str = "Asia/Colombo"
+
     class Config:
         env_file = ".env"
 

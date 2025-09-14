@@ -1,9 +1,9 @@
 from __future__ import annotations
 import os, json, datetime as dt, hashlib
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import text, bindparam
+from sqlalchemy import text, bindparam, Row
 from sqlalchemy.dialects.postgresql import JSONB
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///app/data/app.db")
@@ -51,6 +51,25 @@ CREATE TABLE IF NOT EXISTS grammar_results (
   latency_ms INTEGER,
   created_at TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_analytics_cache (
+  user_id              VARCHAR(64) PRIMARY KEY,
+  window_label         VARCHAR(16) NOT NULL DEFAULT '7d',
+  from_ts              TIMESTAMP,
+  to_ts                TIMESTAMP,
+  attempts_phoneme     INT NOT NULL DEFAULT 0,
+  attempts_grammar     INT NOT NULL DEFAULT 0,
+  per_sle_avg          REAL,
+  per_sle_median       REAL,
+  edits_per_100w_avg   REAL,
+  latency_ms_p50       INT,
+  top_phone_subs       TEXT,      -- JSON
+  top_grammar_errors   TEXT,      -- JSON
+  badge                VARCHAR(64),
+  headline_msg         TEXT,
+  updated_at           TIMESTAMP NOT NULL,
+  expires_at           TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_analytics_cache_expires ON user_analytics_cache (expires_at);
 """
 
 DDL_PG = """
@@ -78,6 +97,25 @@ CREATE TABLE IF NOT EXISTS grammar_results (
   latency_ms INTEGER,
   created_at TIMESTAMPTZ NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_analytics_cache (
+  user_id              VARCHAR(64) PRIMARY KEY,
+  window_label         VARCHAR(16) NOT NULL DEFAULT '7d',
+  from_ts              TIMESTAMPTZ,
+  to_ts                TIMESTAMPTZ,
+  attempts_phoneme     INT NOT NULL DEFAULT 0,
+  attempts_grammar     INT NOT NULL DEFAULT 0,
+  per_sle_avg          NUMERIC(6,2),
+  per_sle_median       NUMERIC(6,2),
+  edits_per_100w_avg   NUMERIC(6,2),
+  latency_ms_p50       INT,
+  top_phone_subs       JSONB,
+  top_grammar_errors   JSONB,
+  badge                VARCHAR(64),
+  headline_msg         TEXT,
+  updated_at           TIMESTAMPTZ NOT NULL,
+  expires_at           TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_analytics_cache_expires ON user_analytics_cache (expires_at);
 """
 
 def _is_pg() -> bool:
@@ -247,3 +285,54 @@ async def fetch_user_results(user_id: str, limit: int = 50):
                 "created_at": row.created_at.isoformat() if hasattr(row.created_at, "isoformat") else str(row.created_at),
             })
     return out
+
+# --- Analytics --- 
+
+async def get_user_analytics_cache(user_id: str) -> Row | None:
+    sql = text("SELECT * FROM user_analytics_cache WHERE user_id = :user_id AND window_label = '7d'")
+    async with Session() as s:
+        result = await s.execute(sql, {"user_id": user_id})
+        return result.fetchone()
+
+async def upsert_user_analytics_cache(payload: dict):
+    if _is_pg():
+        sql = text("""
+            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_errors, badge, headline_msg, updated_at, expires_at)
+            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_errors, :badge, :headline_msg, :updated_at, :expires_at)
+            ON CONFLICT (user_id) DO UPDATE SET
+                from_ts = EXCLUDED.from_ts, to_ts = EXCLUDED.to_ts, attempts_phoneme = EXCLUDED.attempts_phoneme, attempts_grammar = EXCLUDED.attempts_grammar, per_sle_avg = EXCLUDED.per_sle_avg, per_sle_median = EXCLUDED.per_sle_median, edits_per_100w_avg = EXCLUDED.edits_per_100w_avg, latency_ms_p50 = EXCLUDED.latency_ms_p50, top_phone_subs = EXCLUDED.top_phone_subs, top_grammar_errors = EXCLUDED.top_grammar_errors, badge = EXCLUDED.badge, headline_msg = EXCLUDED.headline_msg, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at;
+        """).bindparams(
+            bindparam("top_phone_subs", type_=JSONB),
+            bindparam("top_grammar_errors", type_=JSONB),
+        )
+    else: # SQLite
+        sql = text("""
+            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_errors, badge, headline_msg, updated_at, expires_at)
+            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_errors, :badge, :headline_msg, :updated_at, :expires_at)
+            ON CONFLICT (user_id) DO UPDATE SET
+                from_ts = excluded.from_ts, to_ts = excluded.to_ts, attempts_phoneme = excluded.attempts_phoneme, attempts_grammar = excluded.attempts_grammar, per_sle_avg = excluded.per_sle_avg, per_sle_median = excluded.per_sle_median, edits_per_100w_avg = excluded.edits_per_100w_avg, latency_ms_p50 = excluded.latency_ms_p50, top_phone_subs = excluded.top_phone_subs, top_grammar_errors = excluded.top_grammar_errors, badge = excluded.badge, headline_msg = excluded.headline_msg, updated_at = excluded.updated_at, expires_at = excluded.expires_at;
+        """
+        )
+        # For SQLite, convert JSON objects to strings
+        if payload.get("top_phone_subs") is not None:
+            payload["top_phone_subs"] = json.dumps(payload.get("top_phone_subs"))
+        if payload.get("top_grammar_errors") is not None:
+            payload["top_grammar_errors"] = json.dumps(payload.get("top_grammar_errors"))
+
+    async with Session() as s:
+        await s.execute(sql, payload)
+        await s.commit()
+
+async def get_phoneme_results_last_n_days(user_id: str, days: int) -> List[Row]:
+    sql = text("SELECT per_sle, ops_raw, created_at FROM phoneme_results WHERE user_id = :user_id AND created_at >= :start_date")
+    start_date = dt.datetime.utcnow() - dt.timedelta(days=days)
+    async with Session() as s:
+        result = await s.execute(sql, {"user_id": user_id, "start_date": start_date})
+        return result.fetchall()
+
+async def get_grammar_results_last_n_days(user_id: str, days: int) -> List[Row]:
+    sql = text("SELECT final_text, edits, latency_ms, created_at FROM grammar_results WHERE user_id = :user_id AND created_at >= :start_date")
+    start_date = dt.datetime.utcnow() - dt.timedelta(days=days)
+    async with Session() as s:
+        result = await s.execute(sql, {"user_id": user_id, "start_date": start_date})
+        return result.fetchall()

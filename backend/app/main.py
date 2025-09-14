@@ -1,20 +1,34 @@
-# backend/app/main.py
 from __future__ import annotations
-from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException
+import datetime as dt
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
+
 from .deps import get_settings
-from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut
+from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut
 from .utils_asr import transcribe_bytes
 from .utils_gec import GEC
 from .utils_phone import run_phoneme
-from .db import init_db, save_phoneme_result, save_grammar_result, fetch_user_results
+from . import db
 from .utils_openai import transcribe_audio_with_openai
+from .analytics import compute_last7d
+from .jobs import recompute_all_users_analytics
 
-app = FastAPI(title="Tiny Speech→GEC Backend", version="0.1.5")
+app = FastAPI(title="Tiny Speech→GEC Backend", version="0.2.0")
 settings = get_settings()
 
 # Max file size: 10MB
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+@app.on_event("startup")
+async def startup_event():
+    await db.init_db()
+    # Scheduler for daily analytics job
+    scheduler = AsyncIOScheduler(timezone=pytz.timezone(settings.TIMEZONE))
+    scheduler.add_job(recompute_all_users_analytics, 'cron', hour=3, minute=0) 
+    scheduler.start()
+    print(f"Scheduler started. Daily analytics job scheduled for 03:00 {settings.TIMEZONE}.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,10 +37,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-async def _init():
-    await init_db()
 
 # ---- Lazy GEC loader
 _gec = None
@@ -40,7 +50,46 @@ def get_gec() -> GEC:
 async def health():
     return HealthOut(status="ok", asr_ready=True, gec_ready=True)
 
-# ---- Grammar
+# ---- Analytics Endpoints ----
+
+def format_analytics_response(data) -> dict:
+    return {
+        "user_id": data["user_id"],
+        "window": data["window_label"],
+        "range": {"from_ts": data["from_ts"].isoformat(), "to_ts": data["to_ts"].isoformat()},
+        "attempts": {"phoneme": data["attempts_phoneme"], "grammar": data["attempts_grammar"]},
+        "pronunciation": {
+            "avg_per_sle": data["per_sle_avg"],
+            "median_per_sle": data["per_sle_median"],
+            "top_phone_subs": data["top_phone_subs"],
+        },
+        "grammar": {"edits_per_100w_avg": data["edits_per_100w_avg"], "latency_ms_p50": data["latency_ms_p50"]},
+        "badge": data["badge"],
+        "headline_msg": data["headline_msg"],
+        "updated_at": data["updated_at"].isoformat(),
+        "expires_at": data["expires_at"].isoformat(),
+    }
+
+@app.get("/analytics/{user_id}", response_model=AnalyticsOut)
+async def get_analytics(user_id: str, force: bool = False):
+    if not force:
+        cached_data = await db.get_user_analytics_cache(user_id)
+        if cached_data and cached_data["expires_at"] > dt.datetime.utcnow():
+            return format_analytics_response(cached_data)
+    
+    analytics_data = await compute_last7d(user_id)
+    await db.upsert_user_analytics_cache(analytics_data)
+    return format_analytics_response(analytics_data)
+
+@app.post("/analytics/{user_id}/recompute", response_model=AnalyticsOut)
+async def recompute_analytics(user_id: str, background_tasks: BackgroundTasks):
+    analytics_data = await compute_last7d(user_id)
+    background_tasks.add_task(db.upsert_user_analytics_cache, analytics_data)
+    return format_analytics_response(analytics_data)
+
+
+# ---- Grammar & Phoneme Endpoints ----
+
 @app.post("/gec/correct", response_model=GECSchemaOut)
 async def gec_correct(payload: GECIn):
     gec = get_gec()
@@ -50,7 +99,7 @@ async def gec_correct(payload: GECIn):
         return_edits=payload.return_edits,
         max_new_tokens=payload.max_new_tokens,
     )
-    await save_grammar_result(user_id=payload.user_id, input_text=payload.text, result=result)
+    await db.save_grammar_result(user_id=payload.user_id, input_text=payload.text, result=result)
     return result
 
 @app.post("/gec/speech", response_model=GECSchemaOut)
@@ -58,31 +107,29 @@ async def gec_speech(
     file: UploadFile = File(...),
     sle_mode: bool = True,
     return_edits: bool = True,
-    user_id: str = Form(...),                         # <— user_id in body (form)
+    user_id: str = Form(...),
 ):
     gec = get_gec()
     audio = await file.read()
     text, segs, info = transcribe_bytes(audio, language="en", model_size=settings.WHISPER_SIZE)
     result = gec.respond(text, sle_mode=sle_mode, return_edits=return_edits)
-    await save_grammar_result(user_id=user_id, input_text=text, result=result)
+    await db.save_grammar_result(user_id=user_id, input_text=text, result=result)
     return result
 
-# ---- Phoneme
 @app.post("/phoneme/align", response_model=PhonemeOut)
 async def phoneme_align(
     file: UploadFile = File(...),
-    user_id: str = Form(...),                         # <— user_id in body (form)
+    user_id: str = Form(...),
     ref_text: str | None = Form(None),
 ):
     audio = await file.read()
     result = run_phoneme(audio, ref_text=ref_text)
-    await save_phoneme_result(user_id=user_id, audio_bytes=audio, result=result)
+    await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=result)
     return result
 
-# ---- Read API
 @app.get("/user/{user_id}/results", response_model=UserResultsOut)
 async def get_user_results(user_id: str, limit: int = Query(50, ge=1, le=500)):
-    data = await fetch_user_results(user_id=user_id, limit=limit)
+    data = await db.fetch_user_results(user_id=user_id, limit=limit)
     return UserResultsOut(user_id=user_id, **data)
 
 @app.post("/analyze/both")
@@ -93,13 +140,6 @@ async def analyze_both(
     sle_mode: bool = Form(True),
     return_edits: bool = Form(True),
 ):
-    """
-    Returns BOTH:
-      - phoneme alignment (pred vs ref_text = 'text')
-      - grammar correction over the same 'text'
-    Also persists both results if user_id provided.
-    If 'text' is not provided, it will be transcribed from the audio using OpenAI Whisper.
-    """
     gec = get_gec()
 
     audio = await file.read()
@@ -113,22 +153,16 @@ async def analyze_both(
     else:
         text_to_use = text
 
-    # 1) Phoneme alignment (audio vs provided text)
     phoneme_result = run_phoneme(audio, ref_text=text_to_use)
-
-    # 2) Grammar correction on the provided text
     grammar_result = gec.respond(
         text_to_use, sle_mode=sle_mode, return_edits=return_edits
     )
 
-    # 3) Persist (optional)
     try:
         if user_id:
-            # store separately so each table row stands alone
-            await save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)
-            await save_grammar_result(user_id=user_id, input_text=text_to_use, result=grammar_result)
+            await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)
+            await db.save_grammar_result(user_id=user_id, input_text=text_to_use, result=grammar_result)
     except Exception as e:
-        # Don't fail the request if DB write has issues; just return data.
         print(f"[WARN] DB save failed: {e}")
 
     return {
