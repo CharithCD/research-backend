@@ -1,0 +1,314 @@
+{
+	"info": {
+		"_postman_id": "a8b3c1d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+		"name": "Research Backend API",
+		"description": "A collection of API endpoints for the Tiny Speech->GEC Backend, including transcription, analysis, and user analytics.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "General",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Core GEC & Phoneme",
+			"item": [
+				{
+					"name": "Correct Grammar (Text)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"he go to school yesterday.\",\n    \"user_id\": \"{{userId}}\",\n    \"sle_mode\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/gec/correct",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"gec",
+								"correct"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Correct Grammar (Speech)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/your/audio.wav"
+								},
+								{
+									"key": "user_id",
+									"value": "{{userId}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/gec/speech",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"gec",
+								"speech"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Align Phonemes",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/your/audio.wav"
+								},
+								{
+									"key": "user_id",
+									"value": "{{userId}}",
+									"type": "text"
+								},
+								{
+									"key": "ref_text",
+									"value": "He was happy.",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/phoneme/align",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"phoneme",
+								"align"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Results",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/user/{{userId}}/results?limit=5",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"{{userId}}",
+								"results"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "5"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Combined Analysis",
+			"item": [
+				{
+					"name": "Analyze Both (with Text)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/your/audio.wav"
+								},
+								{
+									"key": "text",
+									"value": "He was happy.",
+									"type": "text"
+								},
+								{
+									"key": "user_id",
+									"value": "{{userId}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/analyze/both",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analyze",
+								"both"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Analyze Both (with Whisper Transcription)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/your/audio.wav"
+								},
+								{
+									"key": "user_id",
+									"value": "{{userId}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/analyze/both",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analyze",
+								"both"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Analytics",
+			"item": [
+				{
+					"name": "Get User Analytics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/analytics/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analytics",
+								"{{userId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Analytics (Forced Recompute)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/analytics/{{userId}}?force=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analytics",
+								"{{userId}}"
+							],
+							"query": [
+								{
+									"key": "force",
+									"value": "true"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger User Analytics Recompute",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/analytics/{{userId}}/recompute",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analytics",
+								"{{userId}}",
+								"recompute"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://157.245.99.84/",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "test123",
+			"type": "string"
+		}
+	]
+}

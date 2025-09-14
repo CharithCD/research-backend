@@ -1,5 +1,8 @@
-research_backend_api    | INFO:     172.18.0.3:51686 - "POST /analytics/test123/recompute HTTP/1.1" 200 OK
-research_backend_api    | INFO:     172.18.0.3:36542 - "GET /analytics/test123 HTTP/1.1" 500 Internal Server Error
+research_backend_api    |   File "/app/app/main.py", line 57, in format_analytics_response
+research_backend_api    |     "user_id": data.user_id,
+research_backend_api    |                ^^^^^^^^^^^^
+research_backend_api    | AttributeError: 'dict' object has no attribute 'user_id'
+research_backend_api    | INFO:     172.18.0.3:53504 - "POST /analytics/test123/recompute HTTP/1.1" 500 Internal Server Error
 research_backend_api    | ERROR:    Exception in ASGI application
 research_backend_api    | Traceback (most recent call last):
 research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 401, in run_asgi
@@ -45,9 +48,10 @@ research_backend_api    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 212, in run_endpoint_function
 research_backend_api    |     return await dependant.call(**values)
 research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/app/app/main.py", line 77, in get_analytics
-research_backend_api    |     if cached_data and cached_data["expires_at"] > dt.datetime.utcnow():
-research_backend_api    |                        ~~~~~~~~~~~^^^^^^^^^^^^^^
-research_backend_api    |   File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 54, in sqlalchemy.cyextension.resultproxy.BaseRow.__getitem__
-research_backend_api    | TypeError: tuple indices must be integers or slices, not str
-
+research_backend_api    |   File "/app/app/main.py", line 90, in recompute_analytics
+research_backend_api    |     return format_analytics_response(analytics_data)
+research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+research_backend_api    |   File "/app/app/main.py", line 57, in format_analytics_response
+research_backend_api    |     "user_id": data.user_id,
+research_backend_api    |                ^^^^^^^^^^^^
+research_backend_api    | AttributeError: 'dict' object has no attribute 'user_id'
