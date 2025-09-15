@@ -8,7 +8,7 @@ import pytz
 
 from .deps import get_settings
 from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut
-from .utils_asr import transcribe_bytes
+from .utils_asr import transcribe_bytes, convert_audio_to_mono_wav
 from .utils_gec import GEC
 from .utils_phone import run_phoneme
 from . import db
@@ -128,7 +128,8 @@ async def phoneme_align(
     ref_text: str | None = Form(None),
 ):
     audio = await file.read()
-    result = run_phoneme(audio, ref_text=ref_text)
+    converted_audio = convert_audio_to_mono_wav(audio)
+    result = run_phoneme(converted_audio, ref_text=ref_text)
     await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=result)
     return result
 
@@ -158,7 +159,8 @@ async def analyze_both(
     else:
         text_to_use = text
 
-    phoneme_result = run_phoneme(audio, ref_text=text_to_use)
+    converted_audio = convert_audio_to_mono_wav(audio)
+    phoneme_result = run_phoneme(converted_audio, ref_text=text_to_use)
     grammar_result = gec.respond(
         text_to_use, sle_mode=sle_mode, return_edits=return_edits
     )
