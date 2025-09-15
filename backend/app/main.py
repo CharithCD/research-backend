@@ -54,21 +54,23 @@ async def health():
 # ---- Analytics Endpoints ----
 
 def format_analytics_response(data) -> dict:
+    # Convert SQLAlchemy row object to a dictionary for easier access
+    data_dict = dict(data)
     return {
-        "user_id": data["user_id"],
-        "window": data["window_label"],
-        "range": {"from_ts": data["from_ts"].isoformat(), "to_ts": data["to_ts"].isoformat()},
-        "attempts": {"phoneme": data["attempts_phoneme"], "grammar": data["attempts_grammar"]},
+        "user_id": data_dict["user_id"],
+        "window": data_dict["window_label"],
+        "range": {"from_ts": data_dict["from_ts"].isoformat(), "to_ts": data_dict["to_ts"].isoformat()},
+        "attempts": {"phoneme": data_dict["attempts_phoneme"], "grammar": data_dict["attempts_grammar"]},
         "pronunciation": {
-            "avg_per_sle": data["per_sle_avg"],
-            "median_per_sle": data["per_sle_median"],
-            "top_phone_subs": json.loads(data["top_phone_subs"]) if isinstance(data["top_phone_subs"], str) else data["top_phone_subs"],
+            "avg_per_sle": data_dict["per_sle_avg"],
+            "median_per_sle": data_dict["per_sle_median"],
+            "top_phone_subs": json.loads(data_dict["top_phone_subs"]) if isinstance(data_dict["top_phone_subs"], str) else data_dict["top_phone_subs"],
         },
-        "grammar": {"edits_per_100w_avg": data["edits_per_100w_avg"], "latency_ms_p50": data["latency_ms_p50"]},
-        "badge": data["badge"],
-        "headline_msg": data["headline_msg"],
-        "updated_at": data["updated_at"].isoformat(),
-        "expires_at": data["expires_at"].isoformat(),
+        "grammar": {"edits_per_100w_avg": data_dict["edits_per_100w_avg"], "latency_ms_p50": data_dict["latency_ms_p50"]},
+        "badge": data_dict["badge"],
+        "headline_msg": data_dict["headline_msg"],
+        "updated_at": data_dict["updated_at"].isoformat(),
+        "expires_at": data_dict["expires_at"].isoformat(),
     }
 
 @app.get("/analytics/{user_id}", response_model=AnalyticsOut)
