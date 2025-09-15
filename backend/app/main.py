@@ -128,7 +128,6 @@ async def phoneme_align(
     ref_text: str | None = Form(None),
 ):
     audio = await file.read()
-    audio = await file.read()
     converted_audio = convert_audio_to_mono_wav(audio)
     result = run_phoneme(converted_audio, ref_text=ref_text)
     await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=result)
@@ -161,7 +160,6 @@ async def analyze_both(
         text_to_use = text
 
     converted_audio = convert_audio_to_mono_wav(audio)
-        converted_audio = convert_audio_to_mono_wav(audio)
     phoneme_result = run_phoneme(converted_audio, ref_text=text_to_use)
     grammar_result = gec.respond(
         text_to_use, sle_mode=sle_mode, return_edits=return_edits
