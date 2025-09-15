@@ -55,7 +55,7 @@ async def health():
 
 def format_analytics_response(data) -> dict:
     # Convert SQLAlchemy row object to a dictionary for easier access
-    data_dict = dict(data)
+    data_dict = data._asdict()
     return {
         "user_id": data_dict["user_id"],
         "window": data_dict["window_label"],

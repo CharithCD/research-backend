@@ -1,18 +1,3 @@
-research_backend_api    | → fetching config.json
-research_backend_api    | download: 's3://my-model-space/model/config.json' -> '/app/app/model/config.json' (2126 bytes in 0.0 seconds, 226.16 KB/s)
-research_backend_api    | → fetching preprocessor_config.json
-research_backend_api    | download: 's3://my-model-space/model/preprocessor_config.json' -> '/app/app/model/preprocessor_config.json' (212 bytes in 0.0 seconds, 46.50 KB/s)
-research_backend_api    | → fetching vocab.json
-research_backend_api    | download: 's3://my-model-space/model/vocab.json' -> '/app/app/model/vocab.json' (459 bytes in 0.0 seconds, 90.73 KB/s)
-research_backend_api    | → fetching model.safetensors
-research_backend_api    | download: 's3://my-model-space/model/model.safetensors' -> '/app/app/model/model.safetensors' (1261971480 bytes in 5.2 seconds, 232.55 MB/s)
-research_backend_api    | [bootstrap] done.
-research_backend_api    | INFO:     Started server process [1]
-research_backend_api    | INFO:     Waiting for application startup.
-research_backend_api    | Scheduler started. Daily analytics job scheduled for 03:00 Asia/Colombo.
-research_backend_api    | INFO:     Application startup complete.
-research_backend_api    | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-research_backend_api    | INFO:     172.18.0.3:49998 - "GET /analytics/test123 HTTP/1.1" 500 Internal Server Error
 research_backend_api    | ERROR:    Exception in ASGI application
 research_backend_api    | Traceback (most recent call last):
 research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 401, in run_asgi
@@ -58,11 +43,11 @@ research_backend_api    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 research_backend_api    |   File "/usr/local/lib/python3.11/site-packages/fastapi/routing.py", line 212, in run_endpoint_function
 research_backend_api    |     return await dependant.call(**values)
 research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-research_backend_api    |   File "/app/app/main.py", line 79, in get_analytics
+research_backend_api    |   File "/app/app/main.py", line 81, in get_analytics
 research_backend_api    |     return format_analytics_response(cached_data)
 research_backend_api    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 research_backend_api    |   File "/app/app/main.py", line 58, in format_analytics_response
-research_backend_api    |     "user_id": data["user_id"],
-research_backend_api    |                ~~~~^^^^^^^^^^^
-research_backend_api    |   File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 54, in sqlalchemy.cyextension.resultproxy.BaseRow.__getitem__
-research_backend_api    | TypeError: tuple indices must be integers or slices, not str
+research_backend_api    |     data_dict = dict(data)
+research_backend_api    |                 ^^^^^^^^^^
+research_backend_api    | ValueError: dictionary update sequence element #0 has length 7; 2 is required
+
