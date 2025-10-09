@@ -17,11 +17,40 @@ class GECSchemaOut(BaseModel):
     guardrails: Optional[List[Dict[str, Any]]] = None
     metrics: Optional[Dict[str, Any]] = None
 
+class PhonemeError(BaseModel):
+    op: str
+    g: Optional[str] = None
+    p: Optional[str] = None
+    i: int
+    j: int
+
+class WordAnalysis(BaseModel):
+    word: str
+    is_correct: bool
+    phoneme_errors: List[PhonemeError]
+
+class Reference(BaseModel):
+    text: str
+    phones: List[str]
+    words: List[Dict[str, Any]]
+
+class Alignment(BaseModel):
+    ops_raw: List[PhonemeError]
+    per_strict: float
+
+class SLEAnalysis(BaseModel):
+    ops_after_rules: List[PhonemeError]
+    dropped_by_rules: List[PhonemeError]
+    per_sle: float
+
 class PhonemeOut(BaseModel):
     pred_phones: List[str]
-    ref: Optional[Dict[str, Any]] = None
-    align: Optional[Dict[str, Any]] = None
-    sle: Optional[Dict[str, Any]] = None
+    ref: Optional[Reference] = None
+    align: Optional[Alignment] = None
+    sle: Optional[SLEAnalysis] = None
+    wer: Optional[float] = None
+    word_analysis: Optional[List[WordAnalysis]] = None
+    weakness_categories: Optional[List[str]] = None
 
 class HealthOut(BaseModel):
     status: str
@@ -47,10 +76,12 @@ class AnalyticsPronunciation(BaseModel):
     avg_per_sle: Optional[float] = None
     median_per_sle: Optional[float] = None
     top_phone_subs: List[Dict[str, Any]]
+    top_pronunciation_weaknesses: List[Dict[str, Any]]
 
 class AnalyticsGrammar(BaseModel):
     edits_per_100w_avg: Optional[float] = None
     latency_ms_p50: Optional[int] = None
+    top_grammar_weaknesses: List[Dict[str, Any]]
 
 class AnalyticsOut(BaseModel):
     user_id: str
@@ -63,3 +94,15 @@ class AnalyticsOut(BaseModel):
     headline_msg: str
     updated_at: str
     expires_at: str
+
+# --- Weaknesses ---
+
+class WeaknessOut(BaseModel):
+    type: str
+    text: str
+    categories: List[str]
+    created_at: str
+
+class PaginatedWeaknessesOut(BaseModel):
+    items: List[WeaknessOut]
+

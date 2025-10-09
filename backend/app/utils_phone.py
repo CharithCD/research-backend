@@ -122,16 +122,46 @@ def _decode_ids(ids: List[int], id2sym: Dict[int, str], blank_id: int) -> List[s
     return seq
 
 
-def _g2p_arpabet(text: str, g2p: G2p) -> List[str]:
+def _g2p_arpabet(text_or_words: str | List[str], g2p: G2p) -> List[str]:
     """ARPAbet-like phones uppercased, stress digits stripped."""
-    text = norm_text(text)
+    words = text_or_words if isinstance(text_or_words, list) else norm_text(text_or_words).split()
     out: List[str] = []
-    for ph in g2p(text):
+    for ph in g2p(words):
         if not ph or ph == " ":
             continue
         ph = "".join(c for c in ph if not c.isdigit()).upper()
         if ph and ph not in {"<PAD>", "<S>", "</S>", "|"}:
             out.append(ph)
+    return out
+
+def _g2p_word_level(norm_text: str, g2p: G2p) -> List[Dict[str, Any]]:
+    """Returns a list of {'word': str, 'phones': List[str]} for a normalized sentence."""
+    words = norm_text.split()
+    phones_flat = _g2p_arpabet(words, g2p)
+    
+    # Heuristic and imperfectly split flat phones back to word boundaries
+    out = [{"word": w, "phones": []} for w in words]
+    phone_idx = 0
+    for i, word in enumerate(words):
+        # This is a rough estimate of how many phonemes a word might have
+        # A better approach would be to use a dictionary or a more sophisticated model
+        expected_phone_count = len(word) 
+        
+        # Get the phonemes for the current word
+        word_phones = _g2p_arpabet(word, g2p)
+        
+        # Match the generated phonemes with the flat list
+        matched_phones = []
+        for p in word_phones:
+            if phone_idx < len(phones_flat) and phones_flat[phone_idx] == p:
+                matched_phones.append(p)
+                phone_idx += 1
+            else:
+                # If there's a mismatch, we might have a g2p inconsistency.
+                # We'll be conservative and just append the phones we have for the word.
+                break
+        out[i]["phones"] = matched_phones if matched_phones else word_phones
+
     return out
 
 
@@ -184,17 +214,81 @@ def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any
     out: Dict[str, Any] = {"pred_phones": pred_phones}
 
     if ref_text:
-        gold = _g2p_arpabet(ref_text, g2p)
-        ops = _align_ops(gold, pred_phones)
-        denom = max(1, len(gold))
+        norm_ref = norm_text(ref_text)
+        words_and_phones = _g2p_word_level(norm_ref, g2p)
+        gold_phones = [p for w in words_and_phones for p in w["phones"]]
+
+        ops = _align_ops(gold_phones, pred_phones)
+        denom = max(1, len(gold_phones))
         per_strict = 100.0 * sum(1 for o in ops if o["op"] in ("S", "I", "D")) / denom
         kept, dropped = _apply_sle_rules(ops, rules)
         per_sle = 100.0 * sum(1 for o in kept if o["op"] in ("S", "I", "D")) / denom
 
+        word_analysis, wer, weaknesses = _analyze_word_level(norm_ref.split(), words_and_phones, pred_phones, kept)
+
         out.update({
-            "ref": {"text": ref_text, "phones": gold},
+            "ref": {"text": ref_text, "phones": gold_phones, "words": words_and_phones},
             "align": {"ops_raw": ops, "per_strict": per_strict},
             "sle": {"ops_after_rules": kept, "dropped_by_rules": dropped, "per_sle": per_sle},
+            "wer": wer,
+            "word_analysis": word_analysis,
+            "weakness_categories": weaknesses,
+        })
+    return out
+
+
+def _map_phone_errors_to_words(words_and_phones: List[Dict[str, Any]], phone_errors: List[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]:
+    """Distributes phone errors back to word indices."""
+    word_errors = {i: [] for i in range(len(words_and_phones))}
+    phone_cursor = 0
+    error_cursor = 0
+    for i, word_data in enumerate(words_and_phones):
+        word_phone_len = len(word_data["phones"])
+        # Find errors that fall within the current word's phoneme span
+        while error_cursor < len(phone_errors):
+            error = phone_errors[error_cursor]
+            # 'i' is the index in the *gold* phoneme list
+            if phone_cursor <= error["i"] < phone_cursor + word_phone_len:
+                word_errors[i].append(error)
+                error_cursor += 1
+            else:
+                break
+        phone_cursor += word_phone_len
+    return word_errors
+
+def _analyze_word_level(ref_words: List[str], words_and_phones: List[Dict[str, Any]], pred_phones: List[str], sle_errors: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float, List[str]]:
+    """Analyzes pronunciation at the word level, calculating WER and identifying weaknesses."""
+    # 1. Map phoneme errors to words
+    word_errors_map = _map_phone_errors_to_words(words_and_phones, sle_errors)
+
+    # 2. Perform word-level analysis
+    word_analysis = []
+    mispronounced_word_count = 0
+    for i, word_data in enumerate(words_and_phones):
+        word = word_data["word"]
+        errors = word_errors_map.get(i, [])
+        is_correct = not errors
+        if not is_correct:
+            mispronounced_word_count += 1
+        
+        word_analysis.append({
+            "word": word,
+            "is_correct": is_correct,
+            "phoneme_errors": errors # Details on substitutions, deletions, insertions
         })
 
-    return out
+    # 3. Calculate Word Error Rate (WER)
+    wer = (mispronounced_word_count / len(ref_words)) * 100 if ref_words else 0
+
+    # 4. Categorize weaknesses based on topics.md
+    # This is a simplified example. A more robust implementation would use a dedicated mapping file.
+    weaknesses = set()
+    for errors in word_errors_map.values():
+        for error in errors:
+            if error["op"] == 'S': # Substitution
+                g, p = error["g"], error["p"]
+                if g == 'TH' and p in ('T', 'D'):
+                    weaknesses.add("pronunciation_th_vs_t")
+                # Add more rules here based on topics.md
+
+    return word_analysis, wer, sorted(list(weaknesses))

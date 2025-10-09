@@ -65,8 +65,13 @@ def format_analytics_response(data) -> dict:
             "avg_per_sle": data_dict["per_sle_avg"],
             "median_per_sle": data_dict["per_sle_median"],
             "top_phone_subs": json.loads(data_dict["top_phone_subs"]) if isinstance(data_dict["top_phone_subs"], str) else data_dict["top_phone_subs"],
+            "top_pronunciation_weaknesses": json.loads(data_dict["top_pronunciation_weaknesses"]) if isinstance(data_dict["top_pronunciation_weaknesses"], str) else data_dict["top_pronunciation_weaknesses"],
         },
-        "grammar": {"edits_per_100w_avg": data_dict["edits_per_100w_avg"], "latency_ms_p50": data_dict["latency_ms_p50"]},
+        "grammar": {
+            "edits_per_100w_avg": data_dict["edits_per_100w_avg"], 
+            "latency_ms_p50": data_dict["latency_ms_p50"],
+            "top_grammar_weaknesses": json.loads(data_dict["top_grammar_weaknesses"]) if isinstance(data_dict["top_grammar_weaknesses"], str) else data_dict["top_grammar_weaknesses"],
+        },
         "badge": data_dict["badge"],
         "headline_msg": data_dict["headline_msg"],
         "updated_at": data_dict["updated_at"].isoformat(),
@@ -93,6 +98,17 @@ async def recompute_analytics(user_id: str, background_tasks: BackgroundTasks):
     return format_analytics_response(analytics_data)
 
 
+@app.get("/weaknesses/{user_id}", response_model=PaginatedWeaknessesOut)
+async def get_user_weaknesses(
+    user_id: str, 
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Fetches a paginated list of all weaknesses for a user."""
+    items = await db.fetch_user_weaknesses(user_id, offset=offset, limit=limit)
+    return PaginatedWeaknessesOut(items=items)
+
+
 # ---- Grammar & Phoneme Endpoints ----
 
 @app.post("/gec/correct", response_model=GECSchemaOut)
@@ -104,6 +120,13 @@ async def gec_correct(payload: GECIn):
         return_edits=payload.return_edits,
         max_new_tokens=payload.max_new_tokens,
     )
+
+    # Categorize grammar error
+    if result.get("gec") and result["gec"].get("final_text"):
+        categories = await categorize_grammar_error(payload.text, result["gec"]["final_text"])
+        if categories:
+            result["weakness_categories"] = categories
+
     await db.save_grammar_result(user_id=payload.user_id, input_text=payload.text, result=result)
     return result
 
@@ -118,6 +141,13 @@ async def gec_speech(
     audio = await file.read()
     text, segs, info = transcribe_bytes(audio, language="en", model_size=settings.WHISPER_SIZE)
     result = gec.respond(text, sle_mode=sle_mode, return_edits=return_edits)
+
+    # Categorize grammar error
+    if result.get("gec") and result["gec"].get("final_text"):
+        categories = await categorize_grammar_error(text, result["gec"]["final_text"])
+        if categories:
+            result["weakness_categories"] = categories
+
     await db.save_grammar_result(user_id=user_id, input_text=text, result=result)
     return result
 
@@ -164,6 +194,12 @@ async def analyze_both(
     grammar_result = gec.respond(
         text_to_use, sle_mode=sle_mode, return_edits=return_edits
     )
+
+    # Categorize grammar error
+    if grammar_result.get("gec") and grammar_result["gec"].get("final_text"):
+        categories = await categorize_grammar_error(text_to_use, grammar_result["gec"]["final_text"])
+        if categories:
+            grammar_result["weakness_categories"] = categories
 
     try:
         if user_id:

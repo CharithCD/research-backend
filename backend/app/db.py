@@ -14,7 +14,7 @@ def _is_pg() -> bool:
 def _ensure_sqlite_dir():
     # Expected format: sqlite+aiosqlite:///absolute/path/to/file.db
     if DATABASE_URL.startswith("sqlite"):
-        parts = DATABASE_URL.split(":///")
+        parts = DATABASE_URL.split(":///")[1]
         if len(parts) == 2:
             db_path = Path(parts[1])          # e.g. /app/data/app.db
             db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS phoneme_results (
   ops_raw TEXT,                      -- JSON string
   per_strict REAL,
   per_sle REAL,
+  wer REAL,
+  word_analysis TEXT,              -- JSON string
+  weakness_categories TEXT,        -- JSON string
   created_at TIMESTAMP NOT NULL
 );
 CREATE TABLE IF NOT EXISTS grammar_results (
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS grammar_results (
   edits TEXT,                        -- JSON string
   guardrails TEXT,                   -- JSON string
   latency_ms INTEGER,
+  weakness_categories TEXT,        -- JSON string
   created_at TIMESTAMP NOT NULL
 );
 CREATE TABLE IF NOT EXISTS user_analytics_cache (
@@ -63,7 +67,8 @@ CREATE TABLE IF NOT EXISTS user_analytics_cache (
   edits_per_100w_avg   REAL,
   latency_ms_p50       INT,
   top_phone_subs       TEXT,      -- JSON
-  top_grammar_errors   TEXT,      -- JSON
+  top_grammar_weaknesses   TEXT,      -- JSON
+  top_pronunciation_weaknesses TEXT, -- JSON
   badge                VARCHAR(64),
   headline_msg         TEXT,
   updated_at           TIMESTAMP NOT NULL,
@@ -83,6 +88,9 @@ CREATE TABLE IF NOT EXISTS phoneme_results (
   ops_raw JSONB,
   per_strict DOUBLE PRECISION,
   per_sle DOUBLE PRECISION,
+  wer DOUBLE PRECISION,
+  word_analysis JSONB,
+  weakness_categories JSONB,
   created_at TIMESTAMPTZ NOT NULL
 );
 CREATE TABLE IF NOT EXISTS grammar_results (
@@ -95,6 +103,7 @@ CREATE TABLE IF NOT EXISTS grammar_results (
   edits JSONB,
   guardrails JSONB,
   latency_ms INTEGER,
+  weakness_categories JSONB,
   created_at TIMESTAMPTZ NOT NULL
 );
 CREATE TABLE IF NOT EXISTS user_analytics_cache (
@@ -109,7 +118,8 @@ CREATE TABLE IF NOT EXISTS user_analytics_cache (
   edits_per_100w_avg   NUMERIC(6,2),
   latency_ms_p50       INT,
   top_phone_subs       JSONB,
-  top_grammar_errors   JSONB,
+  top_grammar_weaknesses   JSONB,
+  top_pronunciation_weaknesses JSONB,
   badge                VARCHAR(64),
   headline_msg         TEXT,
   updated_at           TIMESTAMPTZ NOT NULL,
@@ -135,12 +145,14 @@ async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str
     if _is_pg():
         sql = text("""
           INSERT INTO phoneme_results
-          (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, created_at)
-          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :created_at)
+          (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, wer, word_analysis, weakness_categories, created_at)
+          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :wer, :word_analysis, :weakness_categories, :created_at)
         """).bindparams(
             bindparam("pred_phones", type_=JSONB),
             bindparam("ref_phones", type_=JSONB),
             bindparam("ops_raw", type_=JSONB),
+            bindparam("word_analysis", type_=JSONB),
+            bindparam("weakness_categories", type_=JSONB),
         )
         payload = dict(
             user_id=user_id,
@@ -151,13 +163,16 @@ async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str
             ops_raw=(result.get("align") or {}).get("ops_raw"),             # <— Python list | None
             per_strict=(result.get("align") or {}).get("per_strict"),
             per_sle=(result.get("sle") or {}).get("per_sle"),
+            wer=result.get("wer"),
+            word_analysis=result.get("word_analysis"),
+            weakness_categories=result.get("weakness_categories"),
             created_at=now,
         )
     else:
         sql = text("""
           INSERT INTO phoneme_results
-          (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, created_at)
-          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :created_at)
+          (user_id, audio_sha256, ref_text, pred_phones, ref_phones, ops_raw, per_strict, per_sle, wer, word_analysis, weakness_categories, created_at)
+          VALUES (:user_id, :audio_sha256, :ref_text, :pred_phones, :ref_phones, :ops_raw, :per_strict, :per_sle, :wer, :word_analysis, :weakness_categories, :created_at)
         """)
         payload = dict(
             user_id=user_id,
@@ -168,6 +183,9 @@ async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str
             ops_raw=json.dumps((result.get("align") or {}).get("ops_raw")),
             per_strict=(result.get("align") or {}).get("per_strict"),
             per_sle=(result.get("sle") or {}).get("per_sle"),
+            wer=result.get("wer"),
+            word_analysis=json.dumps(result.get("word_analysis")),
+            weakness_categories=json.dumps(result.get("weakness_categories")),
         created_at=now,
     )
     async with Session() as s:
@@ -182,11 +200,12 @@ async def save_grammar_result(user_id: str, input_text: str, result: Dict[str, A
     if _is_pg():
         sql = text("""
           INSERT INTO grammar_results
-          (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, created_at)
-          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :created_at)
+          (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, weakness_categories, created_at)
+          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :weakness_categories, :created_at)
         """).bindparams(
             bindparam("edits", type_=JSONB),
             bindparam("guardrails", type_=JSONB),
+            bindparam("weakness_categories", type_=JSONB),
         )
         payload = dict(
             user_id=user_id,
@@ -197,13 +216,14 @@ async def save_grammar_result(user_id: str, input_text: str, result: Dict[str, A
             edits=gec.get("edits"),                      # <— Python list
             guardrails=result.get("guardrails"),         # <— Python list
             latency_ms=(result.get("metrics") or {}).get("latency_ms"),
+            weakness_categories=result.get("weakness_categories"),
             created_at=now,
         )
     else:
         sql = text("""
           INSERT INTO grammar_results
-          (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, created_at)
-          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :created_at)
+          (user_id, text_sha256, input_text, raw_corrected, final_text, edits, guardrails, latency_ms, weakness_categories, created_at)
+          VALUES (:user_id, :text_sha256, :input_text, :raw_corrected, :final_text, :edits, :guardrails, :latency_ms, :weakness_categories, :created_at)
         """)
         payload = dict(
             user_id=user_id,
@@ -214,6 +234,7 @@ async def save_grammar_result(user_id: str, input_text: str, result: Dict[str, A
             edits=json.dumps(gec.get("edits")),          # <— TEXT JSON for SQLite
             guardrails=json.dumps(result.get("guardrails")),
             latency_ms=(result.get("metrics") or {}).get("latency_ms"),
+            weakness_categories=json.dumps(result.get("weakness_categories")),
             created_at=now,
         )
     async with Session() as s:
@@ -297,42 +318,78 @@ async def get_user_analytics_cache(user_id: str) -> Row | None:
 async def upsert_user_analytics_cache(payload: dict):
     if _is_pg():
         sql = text("""
-            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_errors, badge, headline_msg, updated_at, expires_at)
-            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_errors, :badge, :headline_msg, :updated_at, :expires_at)
+            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_weaknesses, top_pronunciation_weaknesses, badge, headline_msg, updated_at, expires_at)
+            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_weaknesses, :top_pronunciation_weaknesses, :badge, :headline_msg, :updated_at, :expires_at)
             ON CONFLICT (user_id) DO UPDATE SET
-                from_ts = EXCLUDED.from_ts, to_ts = EXCLUDED.to_ts, attempts_phoneme = EXCLUDED.attempts_phoneme, attempts_grammar = EXCLUDED.attempts_grammar, per_sle_avg = EXCLUDED.per_sle_avg, per_sle_median = EXCLUDED.per_sle_median, edits_per_100w_avg = EXCLUDED.edits_per_100w_avg, latency_ms_p50 = EXCLUDED.latency_ms_p50, top_phone_subs = EXCLUDED.top_phone_subs, top_grammar_errors = EXCLUDED.top_grammar_errors, badge = EXCLUDED.badge, headline_msg = EXCLUDED.headline_msg, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at;
+                from_ts = EXCLUDED.from_ts, to_ts = EXCLUDED.to_ts, attempts_phoneme = EXCLUDED.attempts_phoneme, attempts_grammar = EXCLUDED.attempts_grammar, per_sle_avg = EXCLUDED.per_sle_avg, per_sle_median = EXCLUDED.per_sle_median, edits_per_100w_avg = EXCLUDED.edits_per_100w_avg, latency_ms_p50 = EXCLUDED.latency_ms_p50, top_phone_subs = EXCLUDED.top_phone_subs, top_grammar_weaknesses = EXCLUDED.top_grammar_weaknesses, top_pronunciation_weaknesses = EXCLUDED.top_pronunciation_weaknesses, badge = EXCLUDED.badge, headline_msg = EXCLUDED.headline_msg, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at;
         """).bindparams(
             bindparam("top_phone_subs", type_=JSONB),
-            bindparam("top_grammar_errors", type_=JSONB),
+            bindparam("top_grammar_weaknesses", type_=JSONB),
+            bindparam("top_pronunciation_weaknesses", type_=JSONB),
         )
     else: # SQLite
         sql = text("""
-            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_errors, badge, headline_msg, updated_at, expires_at)
-            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_errors, :badge, :headline_msg, :updated_at, :expires_at)
+            INSERT INTO user_analytics_cache (user_id, window_label, from_ts, to_ts, attempts_phoneme, attempts_grammar, per_sle_avg, per_sle_median, edits_per_100w_avg, latency_ms_p50, top_phone_subs, top_grammar_weaknesses, top_pronunciation_weaknesses, badge, headline_msg, updated_at, expires_at)
+            VALUES (:user_id, :window_label, :from_ts, :to_ts, :attempts_phoneme, :attempts_grammar, :per_sle_avg, :per_sle_median, :edits_per_100w_avg, :latency_ms_p50, :top_phone_subs, :top_grammar_weaknesses, :top_pronunciation_weaknesses, :badge, :headline_msg, :updated_at, :expires_at)
             ON CONFLICT (user_id) DO UPDATE SET
-                from_ts = excluded.from_ts, to_ts = excluded.to_ts, attempts_phoneme = excluded.attempts_phoneme, attempts_grammar = excluded.attempts_grammar, per_sle_avg = excluded.per_sle_avg, per_sle_median = excluded.per_sle_median, edits_per_100w_avg = excluded.edits_per_100w_avg, latency_ms_p50 = excluded.latency_ms_p50, top_phone_subs = excluded.top_phone_subs, top_grammar_errors = excluded.top_grammar_errors, badge = excluded.badge, headline_msg = excluded.headline_msg, updated_at = excluded.updated_at, expires_at = excluded.expires_at;
-        """
-        )
+                from_ts = excluded.from_ts, to_ts = excluded.to_ts, attempts_phoneme = excluded.attempts_phoneme, attempts_grammar = excluded.attempts_grammar, per_sle_avg = excluded.per_sle_avg, per_sle_median = excluded.per_sle_median, edits_per_100w_avg = excluded.edits_per_100w_avg, latency_ms_p50 = excluded.latency_ms_p50, top_phone_subs = excluded.top_phone_subs, top_grammar_weaknesses = excluded.top_grammar_weaknesses, top_pronunciation_weaknesses = excluded.top_pronunciation_weaknesses, badge = excluded.badge, headline_msg = excluded.headline_msg, updated_at = excluded.updated_at, expires_at = excluded.expires_at;
+        """)
         # For SQLite, convert JSON objects to strings
         if payload.get("top_phone_subs") is not None:
             payload["top_phone_subs"] = json.dumps(payload.get("top_phone_subs"))
-        if payload.get("top_grammar_errors") is not None:
-            payload["top_grammar_errors"] = json.dumps(payload.get("top_grammar_errors"))
+        if payload.get("top_grammar_weaknesses") is not None:
+            payload["top_grammar_weaknesses"] = json.dumps(payload.get("top_grammar_weaknesses"))
+        if payload.get("top_pronunciation_weaknesses") is not None:
+            payload["top_pronunciation_weaknesses"] = json.dumps(payload.get("top_pronunciation_weaknesses"))
 
     async with Session() as s:
         await s.execute(sql, payload)
         await s.commit()
 
 async def get_phoneme_results_last_n_days(user_id: str, days: int) -> List[Row]:
-    sql = text("SELECT per_sle, ops_raw, created_at FROM phoneme_results WHERE user_id = :user_id AND created_at >= :start_date")
+    sql = text("SELECT per_sle, ops_raw, weakness_categories, created_at FROM phoneme_results WHERE user_id = :user_id AND created_at >= :start_date")
     start_date = dt.datetime.utcnow() - dt.timedelta(days=days)
     async with Session() as s:
         result = await s.execute(sql, {"user_id": user_id, "start_date": start_date})
         return result.fetchall()
 
 async def get_grammar_results_last_n_days(user_id: str, days: int) -> List[Row]:
-    sql = text("SELECT final_text, edits, latency_ms, created_at FROM grammar_results WHERE user_id = :user_id AND created_at >= :start_date")
+    sql = text("SELECT final_text, edits, latency_ms, weakness_categories, created_at FROM grammar_results WHERE user_id = :user_id AND created_at >= :start_date")
     start_date = dt.datetime.utcnow() - dt.timedelta(days=days)
     async with Session() as s:
         result = await s.execute(sql, {"user_id": user_id, "start_date": start_date})
         return result.fetchall()
+
+async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) -> List[Dict[str, Any]]:
+    """Fetches a paginated list of all weaknesses for a user."""
+    sql = text("""
+        SELECT type, text, categories, created_at FROM (
+            SELECT 'grammar' as type, input_text as text, weakness_categories as categories, created_at
+            FROM grammar_results
+            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]'
+            UNION ALL
+            SELECT 'pronunciation' as type, ref_text as text, weakness_categories as categories, created_at
+            FROM phoneme_results
+            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]'
+        )
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    
+    results = []
+    async with Session() as s:
+        res = await s.execute(sql, {"user_id": user_id, "limit": limit, "offset": offset})
+        for row in res.fetchall():
+            categories = row.categories
+            try:
+                categories = json.loads(categories) if isinstance(categories, str) else categories
+            except json.JSONDecodeError:
+                categories = []
+            
+            results.append({
+                "type": row.type,
+                "text": row.text,
+                "categories": categories,
+                "created_at": row.created_at.isoformat(),
+            })
+    return results

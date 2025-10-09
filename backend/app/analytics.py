@@ -56,28 +56,52 @@ async def compute_last7d(user_id: str) -> dict:
 
     edits100 = []
     latencies = []
+    grammar_weaknesses = Counter()
     for r in grammar_results:
         edits = json.loads(r.edits) if isinstance(r.edits, str) else (r.edits or [])
         words = max(1, len((r.final_text or "").split()))
         edits100.append(len(edits) * 100.0 / words)
         if r.latency_ms is not None:
             latencies.append(r.latency_ms)
+        
+        cats = json.loads(r.weakness_categories) if isinstance(r.weakness_categories, str) else r.weakness_categories
+        if cats:
+            grammar_weaknesses.update(cats)
 
     edits_per_100w_avg = round(float(np.mean(edits100)), 2) if edits100 else None
     latency_ms_p50 = int(np.percentile(latencies, 50)) if latencies else None
+    top_grammar_weaknesses = [{"category": k, "count": v} for k, v in grammar_weaknesses.most_common(5)]
 
     subs_counts = Counter()
+    pronunciation_weaknesses = Counter()
     for r in phoneme_results:
-        for ref, hyp in extract_sub_pairs(r.ops_raw):
-            subs_counts[f"{ref}->{hyp}"] += 1
+        # Refined top_phone_subs to only include actual errors
+        ops = json.loads(r.ops_raw) if isinstance(r.ops_raw, str) else r.ops_raw
+        if ops:
+            for op in ops:
+                if op.get("op") == "S" and op.get("g") and op.get("p"):
+                    subs_counts[f"{op['g']}->{op['p']}"] += 1
+        
+        cats = json.loads(r.weakness_categories) if isinstance(r.weakness_categories, str) else r.weakness_categories
+        if cats:
+            pronunciation_weaknesses.update(cats)
+
     top_subs = [{"pair": k, "count": v} for k, v in subs_counts.most_common(5)]
+    top_pronunciation_weaknesses = [{"category": k, "count": v} for k, v in pronunciation_weaknesses.most_common(5)]
 
     badge = "Most Improved" if (per_sle_avg is not None and per_sle_avg < 15) else "Keep Going"
 
     # --- LLM Insight --- 
     insight_payload = {
-        "pronunciation": {"avg_per_sle": per_sle_avg, "median_per_sle": per_sle_median, "top_phone_subs": top_subs},
-        "grammar": {"edits_per_100w_avg": edits_per_100w_avg, "latency_ms_p50": latency_ms_p50},
+        "pronunciation": {
+            "avg_per_sle": per_sle_avg, 
+            "top_phone_subs": top_subs,
+            "top_weaknesses": top_pronunciation_weaknesses
+        },
+        "grammar": {
+            "edits_per_100w_avg": edits_per_100w_avg,
+            "top_weaknesses": top_grammar_weaknesses
+        },
         "attempts": {"phoneme": attempts_phoneme, "grammar": attempts_grammar},
         "badge": badge
     }
@@ -98,7 +122,8 @@ async def compute_last7d(user_id: str) -> dict:
         "edits_per_100w_avg": edits_per_100w_avg,
         "latency_ms_p50": latency_ms_p50,
         "top_phone_subs": top_subs,
-        "top_grammar_errors": [], # Placeholder
+        "top_grammar_weaknesses": top_grammar_weaknesses,
+        "top_pronunciation_weaknesses": top_pronunciation_weaknesses,
         "badge": badge,
         "headline_msg": headline,
         "updated_at": now,
