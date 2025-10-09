@@ -33,10 +33,15 @@ nltk.download('cmudict', download_dir='/root/nltk_data')
 PY
 ENV NLTK_DATA=/root/nltk_data
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsndfile1 ffmpeg git s3cmd && \
-    rm -rf /var/lib/apt/lists/*
-
+# Pre-download the grammar model to avoid runtime errors
+RUN python - <<'PY'
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+model_id = "vennify/t5-base-grammar-correction"
+print(f"Downloading model {model_id}...")
+AutoTokenizer.from_pretrained(model_id)
+AutoModelForSeq2SeqLM.from_pretrained(model_id)
+print("Model download complete.")
+PY
 
 EXPOSE 8000
 
