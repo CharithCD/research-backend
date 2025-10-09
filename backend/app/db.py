@@ -138,6 +138,32 @@ async def init_db():
         for stmt in filter(None, (s.strip() for s in ddl.split(";"))):
             await conn.execute(text(stmt))
 
+    # --- Add new columns if they don't exist (idempotent migration) ---
+    async with engine.begin() as conn:
+        alter_commands = [
+            # phoneme_results
+            "ALTER TABLE phoneme_results ADD COLUMN wer REAL",
+            "ALTER TABLE phoneme_results ADD COLUMN word_analysis TEXT",
+            "ALTER TABLE phoneme_results ADD COLUMN weakness_categories TEXT",
+            # grammar_results
+            "ALTER TABLE grammar_results ADD COLUMN weakness_categories TEXT",
+        ]
+        if _is_pg():
+            alter_commands = [
+                "ALTER TABLE phoneme_results ADD COLUMN wer DOUBLE PRECISION",
+                "ALTER TABLE phoneme_results ADD COLUMN word_analysis JSONB",
+                "ALTER TABLE phoneme_results ADD COLUMN weakness_categories JSONB",
+                "ALTER TABLE grammar_results ADD COLUMN weakness_categories JSONB",
+            ]
+
+        for cmd in alter_commands:
+            try:
+                await conn.execute(text(cmd))
+            except Exception as e:
+                # Typically "column ... already exists", which is fine
+                if "already exists" not in str(e) and "duplicate column name" not in str(e):
+                    print(f"[DB-MIGRATE-WARN] Alter command failed: {cmd} | {e}")
+
 async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str, Any]):
     audio_sha = hashlib.sha256(audio_bytes).hexdigest()
     now = dt.datetime.utcnow()
