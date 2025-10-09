@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
 from .deps import get_settings
-from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut
+from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut, PaginatedWeaknessesOut
 from .utils_asr import transcribe_bytes, convert_audio_to_mono_wav
 from .utils_gec import GEC
 from .utils_phone import run_phoneme

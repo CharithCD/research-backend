@@ -1,3 +1,8 @@
+cd /
+cd opt/
+cd research-backend/
+
+
 curl -s -X POST http://157.245.99.84/analyze/both \
   -F "file=@H:/short16k.wav" \
   -F "ref_text=He was happy"
