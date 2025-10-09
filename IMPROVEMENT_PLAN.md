@@ -6,33 +6,33 @@
 
 ## TODO List
 
-- [ ] **Phase 0: Foundational Database Upgrade**
-  - [ ] Modify `phoneme_results` table schema in `db.py`.
-  - [ ] Modify `grammar_results` table schema in `db.py`.
-  - [ ] Modify `user_analytics_cache` table schema in `db.py`.
-  - [ ] Update `save_phoneme_result` function in `db.py`.
-  - [ ] Update `save_grammar_result` function in `db.py`.
-  - [ ] Update `upsert_user_analytics_cache` function in `db.py`.
+- [x] **Phase 0: Foundational Database Upgrade**
+  - [x] Modify `phoneme_results` table schema in `db.py`.
+  - [x] Modify `grammar_results` table schema in `db.py`.
+  - [x] Modify `user_analytics_cache` table schema in `db.py`.
+  - [x] Update `save_phoneme_result` function in `db.py`.
+  - [x] Update `save_grammar_result` function in `db.py`.
+  - [x] Update `upsert_user_analytics_cache` function in `db.py`.
 
-- [ ] **Phase 1: Enhance Real-time Pronunciation Analysis (`/analyze/both`)**
-  - [ ] Implement word-level analysis and WER calculation in `utils_phone.py`.
-  - [ ] Implement pronunciation weakness categorization in `utils_phone.py`.
-  - [ ] Update `/analyze/both` endpoint in `main.py` to return the new analysis structure.
-  - [ ] Create/update response schemas in `schemas.py` for the new analysis structure.
+- [x] **Phase 1: Enhance Real-time Pronunciation Analysis (`/analyze/both`)**
+  - [x] Implement word-level analysis and WER calculation in `utils_phone.py`.
+  - [x] Implement pronunciation weakness categorization in `utils_phone.py`.
+  - [x] Update `/analyze/both` endpoint in `main.py` to return the new analysis structure.
+  - [x] Create/update response schemas in `schemas.py` for the new analysis structure.
 
-- [ ] **Phase 2: Implement AI-Powered Grammar Categorization**
-  - [ ] Create `categorize_grammar_error` function in `utils_openai.py`.
-  - [ ] Integrate categorization into `gec_correct` and `gec_speech` endpoints in `main.py`.
+- [x] **Phase 2: Implement AI-Powered Grammar Categorization**
+  - [x] Create `categorize_grammar_error` function in `utils_openai.py`.
+  - [x] Integrate categorization into `gec_correct` and `gec_speech` endpoints in `main.py`.
 
-- [ ] **Phase 3: Create New Paginated Weaknesses Endpoint (`/weaknesses/{user_id}`)**
-  - [ ] Create `fetch_user_weaknesses` database query function in `db.py`.
-  - [ ] Define `WeaknessOut` and `PaginatedWeaknessesOut` schemas in `schemas.py`.
-  - [ ] Implement the `/weaknesses/{user_id}` endpoint in `main.py`.
+- [x] **Phase 3: Create New Paginated Weaknesses Endpoint (`/weaknesses/{user_id}`)**
+  - [x] Create `fetch_user_weaknesses` database query function in `db.py`.
+  - [x] Define `WeaknessOut` and `PaginatedWeaknessesOut` schemas in `schemas.py`.
+  - [x] Implement the `/weaknesses/{user_id}` endpoint in `main.py`.
 
-- [ ] **Phase 4: Supercharge the 7-Day Analytics (`/analytics/{user_id}`)**
-  - [ ] Update `compute_last7d` in `analytics.py` to calculate top pronunciation and grammar weaknesses.
-  - [ ] Update `format_analytics_response` in `main.py` to include the new analytics data.
-  - [ ] Update `AnalyticsOut` and related schemas in `schemas.py`.
+- [x] **Phase 4: Supercharge the 7-Day Analytics (`/analytics/{user_id}`)**
+  - [x] Update `compute_last7d` in `analytics.py` to calculate top pronunciation and grammar weaknesses.
+  - [x] Update `format_analytics_response` in `main.py` to include the new analytics data.
+  - [x] Update `AnalyticsOut` and related schemas in `schemas.py`.
 
 ---
 

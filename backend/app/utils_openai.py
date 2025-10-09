@@ -47,3 +47,43 @@ async def generate_insight_openai(payload: dict) -> dict | None:
     except (openai.APIError, json.JSONDecodeError) as e:
         print(f"[WARN] OpenAI insight generation failed: {e}")
         return None
+
+
+GRAMMAR_TOPICS_PROMPT = """
+"past_simple_tense_usage", "subject_verb_agreement", "irregular_verbs", "article_usage",
+"phrasal_verbs", "synonyms_and_antonyms", "reading_comprehension", "word_order_in_questions",
+"conditional_sentences", "prepositions_of_time_and_place", "passive_voice", "listening_for_specific_information",
+"academic_vocabulary", "spelling_errors_common_words"
+"""
+
+GRAMMAR_SYSTEM_PROMPT = f"""You are an expert English grammar teacher. Analyze the following change and categorize the grammatical error based on the user's final corrected text. Choose the most relevant category from the provided list. Your response must be a JSON object with a key 'categories' containing a list of the identified category strings.
+
+Available categories:
+{GRAMMAR_TOPICS_PROMPT}
+"""
+
+async def categorize_grammar_error(original_text: str, corrected_text: str) -> list[str] | None:
+    settings = get_settings()
+    if not settings.OPENAI_API_KEY:
+        return None
+
+    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+    user_prompt = f"Original: {original_text}\nCorrected: {corrected_text}"
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": GRAMMAR_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            timeout=8.0,
+        )
+        result = json.loads(response.choices[0].message.content)
+        return result.get("categories", [])
+    except (openai.APIError, json.JSONDecodeError) as e:
+        print(f"[WARN] OpenAI grammar categorization failed: {e}")
+        return None
