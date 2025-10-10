@@ -33,16 +33,6 @@ nltk.download('cmudict', download_dir='/root/nltk_data')
 PY
 ENV NLTK_DATA=/root/nltk_data
 
-# Pre-download the grammar model to avoid runtime errors
-RUN python - <<'PY'
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-model_id = "vennify/t5-base-grammar-correction"
-print(f"Downloading model {model_id}...")
-AutoTokenizer.from_pretrained(model_id)
-AutoModelForSeq2SeqLM.from_pretrained(model_id)
-print("Model download complete.")
-PY
-
 EXPOSE 8000
 
 # Pull model if missing, then run API
