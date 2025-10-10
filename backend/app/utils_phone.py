@@ -192,6 +192,29 @@ def _apply_sle_rules(ops: List[Dict[str, Any]], rules_json: Dict[str, Any]) -> T
     return kept, dropped
 
 
+PRONUNCIATION_WEAKNESS_MAP = {
+    # TH sounds
+    ("TH", "T"): "pronunciation_th_vs_t",
+    ("TH", "D"): "pronunciation_th_vs_t",
+    ("DH", "D"): "pronunciation_th_vs_t",
+    ("DH", "V"): "pronunciation_th_vs_t",
+    # R vs L sounds
+    ("R", "L"): "pronunciation_r_vs_l",
+    ("L", "R"): "pronunciation_r_vs_l",
+    # Add more rules here based on topics.md
+}
+
+def _categorize_pronunciation_weaknesses(errors: List[Dict[str, Any]]) -> List[str]:
+    """Categorizes phoneme errors based on a predefined rulebook."""
+    categories = set()
+    for error in errors:
+        if error["op"] == 'S':  # Substitution
+            g, p = error["g"], error["p"]
+            if (g, p) in PRONUNCIATION_WEAKNESS_MAP:
+                categories.add(PRONUNCIATION_WEAKNESS_MAP[(g, p)])
+    return sorted(list(categories))
+
+
 def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any]:
     model, feat, id2sym, rules, g2p, blank_id = _load_once()
 
@@ -224,15 +247,18 @@ def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any
         kept, dropped = _apply_sle_rules(ops, rules)
         per_sle = 100.0 * sum(1 for o in kept if o["op"] in ("S", "I", "D")) / denom
 
-        word_analysis, wer, weaknesses = _analyze_word_level(norm_ref.split(), words_and_phones, pred_phones, kept)
+        word_analysis, overall_weaknesses = _analyze_word_level(norm_ref.split(), words_and_phones, kept)
 
         out.update({
-            "ref": {"text": ref_text, "phones": gold_phones, "words": words_and_phones},
-            "align": {"ops_raw": ops, "per_strict": per_strict},
-            "sle": {"ops_after_rules": kept, "dropped_by_rules": dropped, "per_sle": per_sle},
-            "wer": wer,
+            "phoneme_error_rate": per_sle,
             "word_analysis": word_analysis,
-            "weakness_categories": weaknesses,
+            "weakness_categories": overall_weaknesses,
+            "details": {
+                "ref_text": ref_text,
+                "pred_phones": pred_phones,
+                "ref_phones": gold_phones,
+                "ops_after_rules": kept,
+            }
         })
     return out
 
@@ -256,39 +282,22 @@ def _map_phone_errors_to_words(words_and_phones: List[Dict[str, Any]], phone_err
         phone_cursor += word_phone_len
     return word_errors
 
-def _analyze_word_level(ref_words: List[str], words_and_phones: List[Dict[str, Any]], pred_phones: List[str], sle_errors: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float, List[str]]:
-    """Analyzes pronunciation at the word level, calculating WER and identifying weaknesses."""
-    # 1. Map phoneme errors to words
+def _analyze_word_level(ref_words: List[str], words_and_phones: List[Dict[str, Any]], sle_errors: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Analyzes pronunciation at the word level, identifying errors and weakness categories for each word."""
     word_errors_map = _map_phone_errors_to_words(words_and_phones, sle_errors)
-
-    # 2. Perform word-level analysis
     word_analysis = []
-    mispronounced_word_count = 0
+    all_weaknesses = set()
+
     for i, word_data in enumerate(words_and_phones):
-        word = word_data["word"]
         errors = word_errors_map.get(i, [])
-        is_correct = not errors
-        if not is_correct:
-            mispronounced_word_count += 1
+        categories = _categorize_pronunciation_weaknesses(errors)
+        if categories:
+            all_weaknesses.update(categories)
         
         word_analysis.append({
-            "word": word,
-            "is_correct": is_correct,
-            "phoneme_errors": errors # Details on substitutions, deletions, insertions
+            "word": word_data["word"],
+            "phoneme_errors": errors,
+            "weakness_categories": categories
         })
 
-    # 3. Calculate Word Error Rate (WER)
-    wer = (mispronounced_word_count / len(ref_words)) * 100 if ref_words else 0
-
-    # 4. Categorize weaknesses based on topics.md
-    # This is a simplified example. A more robust implementation would use a dedicated mapping file.
-    weaknesses = set()
-    for errors in word_errors_map.values():
-        for error in errors:
-            if error["op"] == 'S': # Substitution
-                g, p = error["g"], error["p"]
-                if g == 'TH' and p in ('T', 'D'):
-                    weaknesses.add("pronunciation_th_vs_t")
-                # Add more rules here based on topics.md
-
-    return word_analysis, wer, sorted(list(weaknesses))
+    return word_analysis, sorted(list(all_weaknesses))
