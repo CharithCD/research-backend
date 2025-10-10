@@ -176,13 +176,15 @@ def _align_ops(gold: List[str], pred: List[str]) -> List[Dict[str, Any]]:
     """Levenshtein ops with readable symbols & indices."""
     ops: List[Dict[str, Any]] = []
     for op, i, j in L.editops(gold, pred):
-        if op == "replace":
-            ops.append({"op": "S", "g": gold[i], "p": pred[j], "i": i, "j": j})
-        elif op == "delete":
-            ops.append({"op": "D", "g": gold[i], "p": None,    "i": i, "j": j})
-        elif op == "insert":
-            ops.append({"op": "I", "g": None,    "p": pred[j], "i": i, "j": j})
-    return ops
+            if op == "replace":
+                description = f"Substitution: {gold[i]} sound was replaced with {pred[j]} sound"
+                ops.append({"op": "S", "g": gold[i], "p": pred[j], "i": i, "j": j, "description": description})
+            elif op == "delete":
+                description = f"Deletion: {gold[i]} sound was deleted"
+                ops.append({"op": "D", "g": gold[i], "p": None,    "i": i, "j": j, "description": description})
+            elif op == "insert":
+                description = f"Insertion: {pred[j]} sound was inserted"
+                ops.append({"op": "I", "g": None,    "p": pred[j], "i": i, "j": j, "description": description})    return ops
 
 
 def _apply_pronunciation_guardrails(ops: List[Dict[str, Any]], guardrails_json: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -229,17 +231,42 @@ PRONUNCIATION_WEAKNESS_MAP = {
     # R vs L sounds
     ("R", "L"): "pronunciation_r_vs_l",
     ("L", "R"): "pronunciation_r_vs_l",
-    # Add more rules here based on topics.md
+    # SH vs JH
+    ("SH", "JH"): "consonant_clusters",
+    ("JH", "SH"): "consonant_clusters",
+    # Generic consonant errors (example)
+    ("T", None): "consonant_pronunciation", # Deletion of T
+    (None, "T"): "consonant_pronunciation", # Insertion of T
 }
 
 def _categorize_pronunciation_weaknesses(errors: List[Dict[str, Any]]) -> List[str]:
     """Categorizes phoneme errors based on a predefined rulebook."""
     categories = set()
     for error in errors:
-        if error["op"] == 'S':  # Substitution
-            g, p = error["g"], error["p"]
+        op_type = error["op"]
+        g = error.get("g")
+        p = error.get("p")
+
+        if op_type == 'S':  # Substitution
             if (g, p) in PRONUNCIATION_WEAKNESS_MAP:
                 categories.add(PRONUNCIATION_WEAKNESS_MAP[(g, p)])
+            else:
+                # Generic consonant substitution if not mapped
+                if g and p and g.isalpha() and p.isalpha(): # Simple check for consonants
+                    categories.add("consonant_pronunciation")
+        elif op_type == 'D': # Deletion
+            if (g, None) in PRONUNCIATION_WEAKNESS_MAP:
+                categories.add(PRONUNCIATION_WEAKNESS_MAP[(g, None)])
+            else:
+                if g and g.isalpha():
+                    categories.add("consonant_pronunciation") # Generic deletion
+        elif op_type == 'I': # Insertion
+            if (None, p) in PRONUNCIATION_WEAKNESS_MAP:
+                categories.add(PRONUNCIATION_WEAKNESS_MAP[(None, p)])
+            else:
+                if p and p.isalpha():
+                    categories.add("consonant_pronunciation") # Generic insertion
+
     return sorted(list(categories))
 
 
