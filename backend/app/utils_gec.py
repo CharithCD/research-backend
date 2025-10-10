@@ -161,7 +161,7 @@ class GEC:
     def __init__(self, model_id: str, token: str | None = None):
         self.model_id = model_id
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, token=token)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_id, use_safetensors=True, token=token)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_id, use_safetensors=False, token=token)
         self.device = torch.device("cpu")
         self.model.to(self.device).eval()
 
