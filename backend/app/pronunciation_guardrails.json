@@ -1,0 +1,21 @@
+{
+    "rules": [
+        {"type": "S", "gold": "IH", "pred": "AH", "enabled": true, "reason": "Common SLE substitution"},
+        {"type": "S", "gold": "AH", "pred": "IH", "enabled": true, "reason": "Common SLE substitution"},
+        {"type": "S", "gold": "S", "pred": "Z", "enabled": true, "reason": "Common SLE substitution"},
+        {"type": "S", "gold": "T", "pred": "D", "enabled": true, "reason": "Common SLE substitution"},
+        {"type": "S", "gold": "AE", "pred": "AH", "enabled": true, "reason": "Common SLE substitution"},
+
+        {"type": "D", "gold": "AH", "enabled": true, "reason": "Common SLE deletion"},
+        {"type": "D", "gold": "T", "enabled": true, "reason": "Common SLE deletion"},
+        {"type": "D", "gold": "D", "enabled": true, "reason": "Common SLE deletion"},
+        {"type": "D", "gold": "DH", "enabled": true, "reason": "Common SLE deletion"},
+        {"type": "D", "gold": "S", "enabled": true, "reason": "Common SLE deletion"},
+
+        {"type": "I", "pred": "D", "enabled": true, "reason": "Common SLE insertion"},
+        {"type": "I", "pred": "T", "enabled": true, "reason": "Common SLE insertion"},
+        {"type": "I", "pred": "AH", "enabled": true, "reason": "Common SLE insertion"},
+        {"type": "I", "pred": "IH", "enabled": true, "reason": "Common SLE insertion"},
+        {"type": "I", "pred": "L", "enabled": true, "reason": "Common SLE insertion"}
+    ]
+}

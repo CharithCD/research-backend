@@ -201,6 +201,11 @@ async def analyze_both(
         if categories:
             grammar_result["weakness_categories"] = categories
 
+    # Simplify grammar output
+    grammar_result.pop("id", None)
+    grammar_result.pop("model", None)
+    grammar_result.pop("metrics", None)
+
     try:
         if user_id:
             await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)

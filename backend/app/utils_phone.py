@@ -61,9 +61,9 @@ def _infer_blank_id(model_cfg, id2sym: Dict[int, str]) -> int:
 
 
 def _load_once():
-    global _model, _feat, _id2sym, _rules, _g2p, _blank_id
+    global _model, _feat, _id2sym, _rules, _pron_guardrails, _g2p, _blank_id
     if _model is not None:
-        return _model, _feat, _id2sym, _rules, _g2p, _blank_id
+        return _model, _feat, _id2sym, _rules, _pron_guardrails, _g2p, _blank_id
 
     # Feature extractor & model from local folder
     _feat = AutoFeatureExtractor.from_pretrained("app/model")   # uses preprocessor_config.json
@@ -82,16 +82,23 @@ def _load_once():
     # Robust blank id
     _blank_id = _infer_blank_id(_model.config, _id2sym)
 
-    # Optional SLE rules file
+    # Optional SLE rules file (grammar)
     try:
         with open("app/sle_rules.json", "r", encoding="utf-8") as f:
             _rules = json.load(f)
     except FileNotFoundError:
         _rules = {"rules": []}
 
+    # New: Pronunciation Guardrails
+    try:
+        with open("app/pronunciation_guardrails.json", "r", encoding="utf-8") as f:
+            _pron_guardrails = json.load(f)
+    except FileNotFoundError:
+        _pron_guardrails = {"rules": []}
+
     _ensure_nltk_data()
     _g2p = G2p()
-    return _model, _feat, _id2sym, _rules, _g2p, _blank_id
+    return _model, _feat, _id2sym, _rules, _pron_guardrails, _g2p, _blank_id
 
 
 def _to_mono_16k(wav: np.ndarray, sr: int) -> np.ndarray:
@@ -178,16 +185,37 @@ def _align_ops(gold: List[str], pred: List[str]) -> List[Dict[str, Any]]:
     return ops
 
 
-def _apply_sle_rules(ops: List[Dict[str, Any]], rules_json: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Drop substitution ops S(g->p) that match an enabled SLE rule."""
-    allow_pairs = {(r["gold"].upper(), r["pred"].upper())
-                   for r in rules_json.get("rules", [])
-                   if r.get("enabled", True) and r.get("type") == "S"}
+def _apply_pronunciation_guardrails(ops: List[Dict[str, Any]], guardrails_json: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Drop ops that match an enabled pronunciation guardrail rule."""
     kept, dropped = [], []
+    guardrail_rules = guardrails_json.get("rules", [])
+
     for o in ops:
-        if o["op"] == "S" and (o["g"].upper(), (o["p"] or "").upper()) in allow_pairs:
-            dropped.append(o)
-        else:
+        matched = False
+        for r in guardrail_rules:
+            if not r.get("enabled", True):
+                continue
+
+            rule_type = r.get("type")
+            op_type = o["op"]
+
+            if rule_type == op_type:
+                if rule_type == "S": # Substitution
+                    if o["g"].upper() == r["gold"].upper() and (o["p"] or "").upper() == r["pred"].upper():
+                        dropped.append(o)
+                        matched = True
+                        break
+                elif rule_type == "D": # Deletion
+                    if o["g"].upper() == r["gold"].upper():
+                        dropped.append(o)
+                        matched = True
+                        break
+                elif rule_type == "I": # Insertion
+                    if (o["p"] or "").upper() == r["pred"].upper():
+                        dropped.append(o)
+                        matched = True
+                        break
+        if not matched:
             kept.append(o)
     return kept, dropped
 
@@ -244,7 +272,7 @@ def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any
         ops = _align_ops(gold_phones, pred_phones)
         denom = max(1, len(gold_phones))
         per_strict = 100.0 * sum(1 for o in ops if o["op"] in ("S", "I", "D")) / denom
-        kept, dropped = _apply_sle_rules(ops, rules)
+        kept, dropped = _apply_pronunciation_guardrails(ops, _pron_guardrails)
         per_sle = 100.0 * sum(1 for o in kept if o["op"] in ("S", "I", "D")) / denom
 
         word_analysis, overall_weaknesses = _analyze_word_level(norm_ref.split(), words_and_phones, kept)
@@ -253,12 +281,6 @@ def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any
             "phoneme_error_rate": per_sle,
             "word_analysis": word_analysis,
             "weakness_categories": overall_weaknesses,
-            "details": {
-                "ref_text": ref_text,
-                "pred_phones": pred_phones,
-                "ref_phones": gold_phones,
-                "ops_after_rules": kept,
-            }
         })
     return out
 
