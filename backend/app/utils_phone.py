@@ -184,7 +184,8 @@ def _align_ops(gold: List[str], pred: List[str]) -> List[Dict[str, Any]]:
                 ops.append({"op": "D", "g": gold[i], "p": None,    "i": i, "j": j, "description": description})
             elif op == "insert":
                 description = f"Insertion: {pred[j]} sound was inserted"
-                ops.append({"op": "I", "g": None,    "p": pred[j], "i": i, "j": j, "description": description})    return ops
+                ops.append({"op": "I", "g": None,    "p": pred[j], "i": i, "j": j, "description": description})
+    return ops
 
 
 def _apply_pronunciation_guardrails(ops: List[Dict[str, Any]], guardrails_json: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
