@@ -12,7 +12,7 @@ from .utils_asr import transcribe_bytes, convert_audio_to_mono_wav
 from .utils_gec import GEC
 from .utils_phone import run_phoneme
 from . import db
-from .utils_openai import transcribe_audio_with_openai
+from .utils_openai import transcribe_audio_with_openai, categorize_grammar_error
 from .analytics import compute_last7d
 from .jobs import recompute_all_users_analytics
 
