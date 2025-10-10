@@ -244,7 +244,7 @@ def _categorize_pronunciation_weaknesses(errors: List[Dict[str, Any]]) -> List[s
 
 
 def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any]:
-    model, feat, id2sym, rules, g2p, blank_id = _load_once()
+    model, feat, id2sym, rules, pron_guardrails, g2p, blank_id = _load_once()
 
     # Read & resample audio
     buf = file_bytes if isinstance(file_bytes, (bytes, bytearray)) else file_bytes.read()
