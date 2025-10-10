@@ -122,7 +122,7 @@ async def gec_correct(payload: GECIn):
     )
 
     # Categorize grammar error
-    if result.get("gec") and result["gec"].get("final_text"):
+    if result.get("gec") and result["gec"].get("final_text") and payload.text != result["gec"]["final_text"]:
         categories = await categorize_grammar_error(payload.text, result["gec"]["final_text"])
         if categories:
             result["weakness_categories"] = categories
@@ -143,7 +143,7 @@ async def gec_speech(
     result = gec.respond(text, sle_mode=sle_mode, return_edits=return_edits)
 
     # Categorize grammar error
-    if result.get("gec") and result["gec"].get("final_text"):
+    if result.get("gec") and result["gec"].get("final_text") and text != result["gec"]["final_text"]:
         categories = await categorize_grammar_error(text, result["gec"]["final_text"])
         if categories:
             result["weakness_categories"] = categories
@@ -196,7 +196,7 @@ async def analyze_both(
     )
 
     # Categorize grammar error
-    if grammar_result.get("gec") and grammar_result["gec"].get("final_text"):
+    if grammar_result.get("gec") and grammar_result["gec"].get("final_text") and text_to_use != grammar_result["gec"]["final_text"]:
         categories = await categorize_grammar_error(text_to_use, grammar_result["gec"]["final_text"])
         if categories:
             grammar_result["weakness_categories"] = categories

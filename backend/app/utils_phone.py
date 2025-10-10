@@ -130,7 +130,7 @@ def _g2p_arpabet(text_or_words: str | List[str], g2p: G2p) -> List[str]:
         if not ph or ph == " ":
             continue
         ph = "".join(c for c in ph if not c.isdigit()).upper()
-        if ph and ph not in {"<PAD>", "<S>", "</S>", "|"}:
+        if ph and ph not in {"<PAD>", "<S>", "</S>", "|", "'"}:
             out.append(ph)
     return out
 
