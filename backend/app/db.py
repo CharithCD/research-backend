@@ -474,9 +474,11 @@ async def fetch_user_weakness_summary(user_id: str, limit: int = 100) -> Dict[st
                 if op["op"] == "S":
                     subs[f"{op['g']} -> {op['p']}"] += 1
                 elif op["op"] == "D":
-                    dels[op['g']] += 1
+                    if op['g'] != "'": # Ignore apostrophe deletions
+                        dels[op['g']] += 1
                 elif op["op"] == "I":
-                    ins[op['p']] += 1
+                    if op['p'] != "'": # Ignore apostrophe insertions
+                        ins[op['p']] += 1
 
     grammar_summary = [{"category": k, "count": v} for k, v in grammar_counts.most_common()]
     top_substitutions = [{"pair": k, "count": v} for k, v in subs.most_common(3)]
