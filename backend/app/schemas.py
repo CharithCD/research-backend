@@ -106,3 +106,24 @@ class WeaknessOut(BaseModel):
 class PaginatedWeaknessesOut(BaseModel):
     items: List[WeaknessOut]
 
+# --- Weakness Summary ---
+
+class PronunciationErrorSummary(BaseModel):
+    pair: Optional[str] = None
+    phoneme: Optional[str] = None
+    count: int
+
+class PronunciationSummary(BaseModel):
+    most_common_substitutions: List[PronunciationErrorSummary]
+    most_common_insertions: List[PronunciationErrorSummary]
+    most_common_deletions: List[PronunciationErrorSummary]
+
+class GrammarSummaryItem(BaseModel):
+    category: str
+    count: int
+
+class WeaknessSummaryOut(BaseModel):
+    user_id: str
+    pronunciation_summary: PronunciationSummary
+    grammar_summary: List[GrammarSummaryItem]
+

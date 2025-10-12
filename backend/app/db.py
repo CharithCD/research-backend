@@ -402,11 +402,11 @@ async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) 
         SELECT type, text, categories, created_at FROM (
             SELECT 'grammar' as type, input_text as text, weakness_categories as categories, created_at
             FROM grammar_results
-            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]'
+            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]' AND weakness_categories != 'null'
             UNION ALL
             SELECT 'pronunciation' as type, ref_text as text, weakness_categories as categories, created_at
             FROM phoneme_results
-            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]'
+            WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]' AND weakness_categories != 'null'
         )
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
@@ -430,3 +430,63 @@ async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) 
                 "created_at": row.created_at.isoformat(),
             })
     return results
+
+async def fetch_user_weakness_summary(user_id: str, limit: int = 100) -> Dict[str, Any]:
+    """Fetches a summary of a user's weaknesses from their last N entries."""
+    # 1. Get last N grammar results
+    sql_grammar = text("""
+        SELECT weakness_categories 
+        FROM grammar_results 
+        WHERE user_id = :user_id AND weakness_categories IS NOT NULL AND weakness_categories != '[]' AND weakness_categories != 'null'
+        ORDER BY created_at DESC
+        LIMIT :limit
+    """)
+
+    # 2. Get last N phoneme results
+    sql_pron = text("""
+        SELECT ops_raw 
+        FROM phoneme_results 
+        WHERE user_id = :user_id AND ops_raw IS NOT NULL AND ops_raw != '[]' AND ops_raw != 'null'
+        ORDER BY created_at DESC
+        LIMIT :limit
+    """)
+
+    grammar_counts = Counter()
+    subs = Counter()
+    ins = Counter()
+    dels = Counter()
+
+    async with Session() as s:
+        # Process grammar results
+        res_grammar = await s.execute(sql_grammar, {"user_id": user_id, "limit": limit})
+        for row in res_grammar.fetchall():
+            cats = json.loads(row.weakness_categories) if isinstance(row.weakness_categories, str) else row.weakness_categories
+            if cats: grammar_counts.update(cats)
+
+        # Process phoneme results
+        res_pron = await s.execute(sql_pron, {"user_id": user_id, "limit": limit})
+        for row in res_pron.fetchall():
+            ops = json.loads(row.ops_raw) if isinstance(row.ops_raw, str) else row.ops_raw
+            if not ops: continue
+
+            for op in ops:
+                if op["op"] == "S":
+                    subs[f"{op['g']} -> {op['p']}"] += 1
+                elif op["op"] == "D":
+                    dels[op['g']] += 1
+                elif op["op"] == "I":
+                    ins[op['p']] += 1
+
+    grammar_summary = [{"category": k, "count": v} for k, v in grammar_counts.most_common()]
+    top_substitutions = [{"pair": k, "count": v} for k, v in subs.most_common(3)]
+    top_insertions = [{"phoneme": k, "count": v} for k, v in ins.most_common(3)]
+    top_deletions = [{"phoneme": k, "count": v} for k, v in dels.most_common(3)]
+
+    return {
+        "pronunciation_summary": {
+            "most_common_substitutions": top_substitutions,
+            "most_common_insertions": top_insertions,
+            "most_common_deletions": top_deletions,
+        },
+        "grammar_summary": grammar_summary,
+    }

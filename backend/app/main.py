@@ -109,6 +109,13 @@ async def get_user_weaknesses(
     return PaginatedWeaknessesOut(items=items)
 
 
+@app.get("/weakness/summary/{user_id}", response_model=WeaknessSummaryOut)
+async def get_weakness_summary(user_id: str, limit: int = Query(100, ge=10, le=1000)):
+    """Fetches a summary of a user's weaknesses from their last N entries."""
+    summary_data = await db.fetch_user_weakness_summary(user_id, limit=limit)
+    return WeaknessSummaryOut(user_id=user_id, **summary_data)
+
+
 # ---- Grammar & Phoneme Endpoints ----
 
 @app.post("/gec/correct", response_model=GECSchemaOut)
