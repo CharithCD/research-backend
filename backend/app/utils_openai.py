@@ -50,10 +50,12 @@ async def generate_insight_openai(payload: dict) -> dict | None:
 
 
 GRAMMAR_TOPICS_PROMPT = """
-"past_simple_tense_usage", "subject_verb_agreement", "irregular_verbs", "article_usage",
-"phrasal_verbs", "synonyms_and_antonyms", "reading_comprehension", "word_order_in_questions",
-"conditional_sentences", "prepositions_of_time_and_place", "passive_voice", "listening_for_specific_information",
-"academic_vocabulary", "spelling_errors_common_words"
+"present simple", "past simple tense", "future continuous tense", 
+"past perfect tense", "present perfect", "future perfect", 
+"comparatives and superlatives", "subject verb agreement", 
+"articles a an the", "conditionals", "reported speech", 
+"passive voice", "modal verbs", "question formation", 
+"countable and uncountable nouns", "confusable ex: accept vs except"
 """
 
 GRAMMAR_SYSTEM_PROMPT = f"""You are an expert English grammar teacher. Analyze the following change and categorize the grammatical error based on the user's final corrected text. Choose the most relevant category from the provided list. Your response must be a JSON object with a key 'categories' containing a list of the identified category strings.

@@ -98,7 +98,7 @@ async def recompute_analytics(user_id: str, background_tasks: BackgroundTasks):
     return format_analytics_response(analytics_data)
 
 
-@app.get("/weaknesses/{user_id}", response_model=PaginatedWeaknessesOut)
+@app.get("/weakness/{user_id}", response_model=PaginatedWeaknessesOut)
 async def get_user_weaknesses(
     user_id: str, 
     offset: int = Query(0, ge=0),
@@ -212,6 +212,10 @@ async def analyze_both(
             await db.save_grammar_result(user_id=user_id, input_text=text_to_use, result=grammar_result)
     except Exception as e:
         print(f"[WARN] DB save failed: {e}")
+
+    # Remove details block from phoneme result before returning
+    if "details" in phoneme_result:
+        del phoneme_result["details"]
 
     return {
         "input": {"text": text_to_use, "has_audio": True, "transcribed_text": transcribed_text},

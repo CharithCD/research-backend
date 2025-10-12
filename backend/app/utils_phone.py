@@ -223,52 +223,7 @@ def _apply_pronunciation_guardrails(ops: List[Dict[str, Any]], guardrails_json: 
     return kept, dropped
 
 
-PRONUNCIATION_WEAKNESS_MAP = {
-    # TH sounds
-    ("TH", "T"): "pronunciation_th_vs_t",
-    ("TH", "D"): "pronunciation_th_vs_t",
-    ("DH", "D"): "pronunciation_th_vs_t",
-    ("DH", "V"): "pronunciation_th_vs_t",
-    # R vs L sounds
-    ("R", "L"): "pronunciation_r_vs_l",
-    ("L", "R"): "pronunciation_r_vs_l",
-    # SH vs JH
-    ("SH", "JH"): "consonant_clusters",
-    ("JH", "SH"): "consonant_clusters",
-    # Generic consonant errors (example)
-    ("T", None): "consonant_pronunciation", # Deletion of T
-    (None, "T"): "consonant_pronunciation", # Insertion of T
-}
 
-def _categorize_pronunciation_weaknesses(errors: List[Dict[str, Any]]) -> List[str]:
-    """Categorizes phoneme errors based on a predefined rulebook."""
-    categories = set()
-    for error in errors:
-        op_type = error["op"]
-        g = error.get("g")
-        p = error.get("p")
-
-        if op_type == 'S':  # Substitution
-            if (g, p) in PRONUNCIATION_WEAKNESS_MAP:
-                categories.add(PRONUNCIATION_WEAKNESS_MAP[(g, p)])
-            else:
-                # Generic consonant substitution if not mapped
-                if g and p and g.isalpha() and p.isalpha(): # Simple check for consonants
-                    categories.add("consonant_pronunciation")
-        elif op_type == 'D': # Deletion
-            if (g, None) in PRONUNCIATION_WEAKNESS_MAP:
-                categories.add(PRONUNCIATION_WEAKNESS_MAP[(g, None)])
-            else:
-                if g and g.isalpha():
-                    categories.add("consonant_pronunciation") # Generic deletion
-        elif op_type == 'I': # Insertion
-            if (None, p) in PRONUNCIATION_WEAKNESS_MAP:
-                categories.add(PRONUNCIATION_WEAKNESS_MAP[(None, p)])
-            else:
-                if p and p.isalpha():
-                    categories.add("consonant_pronunciation") # Generic insertion
-
-    return sorted(list(categories))
 
 
 def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any]:
@@ -309,6 +264,14 @@ def run_phoneme(file_bytes: bytes, ref_text: str | None = None) -> Dict[str, Any
             "phoneme_error_rate": per_sle,
             "word_analysis": word_analysis,
             "weakness_categories": overall_weaknesses,
+            "details": {
+                "ref_text": ref_text,
+                "pred_phones": pred_phones,
+                "ref_phones": gold_phones,
+                "ops_after_rules": kept,
+                "per_strict": per_strict,
+                "per_sle": per_sle
+            }
         })
     return out
 
@@ -340,14 +303,24 @@ def _analyze_word_level(ref_words: List[str], words_and_phones: List[Dict[str, A
 
     for i, word_data in enumerate(words_and_phones):
         errors = word_errors_map.get(i, [])
-        categories = _categorize_pronunciation_weaknesses(errors)
-        if categories:
-            all_weaknesses.update(categories)
+        categories = set()
+        for error in errors:
+            op_type = error["op"]
+            if op_type == 'S':
+                categories.add("Substitution")
+            elif op_type == 'D':
+                categories.add("Deletion")
+            elif op_type == 'I':
+                categories.add("Insertion")
+        
+        sorted_categories = sorted(list(categories))
+        if sorted_categories:
+            all_weaknesses.update(sorted_categories)
         
         word_analysis.append({
             "word": word_data["word"],
             "phoneme_errors": errors,
-            "weakness_categories": categories
+            "weakness_categories": sorted_categories
         })
 
     return word_analysis, sorted(list(all_weaknesses))

@@ -164,10 +164,20 @@ async def init_db():
                 if "already exists" not in str(e) and "duplicate column name" not in str(e):
                     print(f"[DB-MIGRATE-WARN] Alter command failed: {cmd} | {e}")
 
+        # Rename old column if it exists
+        rename_cmd = "ALTER TABLE user_analytics_cache RENAME COLUMN top_grammar_errors TO top_grammar_weaknesses"
+        try:
+            await conn.execute(text(rename_cmd))
+        except Exception as e:
+            # This will fail if the column is already renamed, which is fine
+            if "does not exist" not in str(e) and "no such column" not in str(e):
+                 print(f"[DB-MIGRATE-WARN] Rename command failed: {rename_cmd} | {e}")
+
 async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str, Any]):
     audio_sha = hashlib.sha256(audio_bytes).hexdigest()
     now = dt.datetime.utcnow()
 
+    details = result.get("details", {})
     if _is_pg():
         sql = text("""
           INSERT INTO phoneme_results
@@ -183,13 +193,13 @@ async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str
         payload = dict(
             user_id=user_id,
             audio_sha256=audio_sha,
-            ref_text=(result.get("ref") or {}).get("text"),
-            pred_phones=result.get("pred_phones", []),                      # <— Python list
-            ref_phones=(result.get("ref") or {}).get("phones"),             # <— Python list | None
-            ops_raw=(result.get("align") or {}).get("ops_raw"),             # <— Python list | None
-            per_strict=(result.get("align") or {}).get("per_strict"),
-            per_sle=(result.get("sle") or {}).get("per_sle"),
-            wer=result.get("wer"),
+            ref_text=details.get("ref_text"),
+            pred_phones=details.get("pred_phones", []),
+            ref_phones=details.get("ref_phones"),
+            ops_raw=details.get("ops_after_rules"),
+            per_strict=details.get("per_strict"),
+            per_sle=details.get("per_sle"),
+            wer=result.get("wer"), # This can be None
             word_analysis=result.get("word_analysis"),
             weakness_categories=result.get("weakness_categories"),
             created_at=now,
@@ -203,17 +213,17 @@ async def save_phoneme_result(user_id: str, audio_bytes: bytes, result: Dict[str
         payload = dict(
             user_id=user_id,
             audio_sha256=audio_sha,
-            ref_text=(result.get("ref") or {}).get("text"),
-            pred_phones=json.dumps(result.get("pred_phones", [])),          # <— TEXT JSON for SQLite
-            ref_phones=json.dumps((result.get("ref") or {}).get("phones")),
-            ops_raw=json.dumps((result.get("align") or {}).get("ops_raw")),
-            per_strict=(result.get("align") or {}).get("per_strict"),
-            per_sle=(result.get("sle") or {}).get("per_sle"),
-            wer=result.get("wer"),
+            ref_text=details.get("ref_text"),
+            pred_phones=json.dumps(details.get("pred_phones", [])),
+            ref_phones=json.dumps(details.get("ref_phones")),
+            ops_raw=json.dumps(details.get("ops_after_rules")),
+            per_strict=details.get("per_strict"),
+            per_sle=details.get("per_sle"),
+            wer=result.get("wer"), # This can be None
             word_analysis=json.dumps(result.get("word_analysis")),
             weakness_categories=json.dumps(result.get("weakness_categories")),
-        created_at=now,
-    )
+            created_at=now,
+        )
     async with Session() as s:
         await s.execute(sql, payload)
         await s.commit()
@@ -407,14 +417,15 @@ async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) 
         res = await s.execute(sql, {"user_id": user_id, "limit": limit, "offset": offset})
         for row in res.fetchall():
             categories = row.categories
+            text = row.text or ""
             try:
-                categories = json.loads(categories) if isinstance(categories, str) else categories
+                categories = json.loads(categories) if isinstance(categories, str) else (categories or [])
             except json.JSONDecodeError:
                 categories = []
             
             results.append({
                 "type": row.type,
-                "text": row.text,
+                "text": text,
                 "categories": categories,
                 "created_at": row.created_at.isoformat(),
             })
