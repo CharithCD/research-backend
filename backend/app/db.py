@@ -417,7 +417,7 @@ async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) 
         res = await s.execute(sql, {"user_id": user_id, "limit": limit, "offset": offset})
         for row in res.fetchall():
             categories = row.categories
-            text = row.text or ""
+            result_text = row.text or ""
             try:
                 categories = json.loads(categories) if isinstance(categories, str) else (categories or [])
             except json.JSONDecodeError:
@@ -425,7 +425,7 @@ async def fetch_user_weaknesses(user_id: str, offset: int = 0, limit: int = 20) 
             
             results.append({
                 "type": row.type,
-                "text": text,
+                "text": result_text,
                 "categories": categories,
                 "created_at": row.created_at.isoformat(),
             })
