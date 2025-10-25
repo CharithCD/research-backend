@@ -229,3 +229,60 @@ async def analyze_both(
         "phoneme": phoneme_result,
         "grammar": grammar_result,
     }
+
+@app.post("/analyze/pronunciation")
+async def analyze_pronunciation(
+    file: UploadFile = File(...),
+    ref_text: str = Form(...),
+    user_id: str | None = Form(None),
+):
+    audio = await file.read()
+    if len(audio) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File size exceeds limit of {MAX_FILE_SIZE // 1024 // 1024}MB")
+
+    converted_audio = convert_audio_to_mono_wav(audio)
+    phoneme_result = run_phoneme(converted_audio, ref_text=ref_text)
+
+    try:
+        if user_id:
+            await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)
+    except Exception as e:
+        print(f"[WARN] DB save failed: {e}")
+
+    # Remove details block from phoneme result before returning
+    if "details" in phoneme_result:
+        del phoneme_result["details"]
+
+    return {
+        "input": {"text": ref_text, "has_audio": True},
+        "phoneme": phoneme_result,
+    }
+
+@app.post("/analyze/pronunciation")
+async def analyze_pronunciation(
+    file: UploadFile = File(...),
+    ref_text: str = Form(...),
+    user_id: str | None = Form(None),
+):
+    audio = await file.read()
+    if len(audio) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File size exceeds limit of {MAX_FILE_SIZE // 1024 // 1024}MB")
+
+    converted_audio = convert_audio_to_mono_wav(audio)
+    phoneme_result = run_phoneme(converted_audio, ref_text=ref_text)
+
+    try:
+        if user_id:
+            await db.save_phoneme_result(user_id=user_id, audio_bytes=audio, result=phoneme_result)
+    except Exception as e:
+        print(f"[WARN] DB save failed: {e}")
+
+    # Remove details block from phoneme result before returning
+    if "details" in phoneme_result:
+        del phoneme_result["details"]
+
+    return {
+        "input": {"text": ref_text, "has_audio": True},
+        "phoneme": phoneme_result,
+    }
+
