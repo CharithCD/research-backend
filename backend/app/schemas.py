@@ -127,3 +127,30 @@ class WeaknessSummaryOut(BaseModel):
     pronunciation_summary: PronunciationSummary
     grammar_summary: List[GrammarSummaryItem]
 
+# --- Practice Sentences ---
+
+class PracticeSentenceOut(BaseModel):
+    id: str
+    order: int
+    text: str
+    level: str
+    phonemes: List[str]
+    phoneme_counts: Dict[str, int]
+    unique_phonemes: List[str]
+    total_phonemes: int
+    relevance_score: float
+    match_type: str  # "targeted" | "general" | "random"
+    source: str
+
+class PracticeSentencesMetadata(BaseModel):
+    user_level: str
+    weak_phonemes: List[str]
+    avg_per_sle: Optional[float] = None
+    total_attempts: int
+    selection_strategy: str  # "weakness_based" | "random"
+
+class PracticeSentencesResponse(BaseModel):
+    user_id: str
+    sentences: List[PracticeSentenceOut]
+    metadata: PracticeSentencesMetadata
+
