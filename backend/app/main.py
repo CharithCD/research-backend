@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
 from .deps import get_settings
-from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut, PaginatedWeaknessesOut, WeaknessSummaryOut
+from .schemas import HealthOut, GECSchemaOut, PhonemeOut, GECIn, UserResultsOut, AnalyticsOut, PaginatedWeaknessesOut, WeaknessSummaryOut, PracticeSentencesResponse
 from .utils_asr import transcribe_bytes, convert_audio_to_mono_wav
 from .utils_gec import GEC
 from .utils_phone import run_phoneme
@@ -15,6 +15,7 @@ from . import db
 from .utils_openai import transcribe_audio_with_openai, categorize_grammar_error
 from .analytics import compute_last7d
 from .jobs import recompute_all_users_analytics
+from . import practice
 
 app = FastAPI(title="Tiny Speech→GEC Backend", version="0.2.0")
 settings = get_settings()
@@ -114,6 +115,65 @@ async def get_weakness_summary(user_id: str, limit: int = Query(100, ge=10, le=1
     """Fetches a summary of a user's weaknesses from their last N entries."""
     summary_data = await db.fetch_user_weakness_summary(user_id, limit=limit)
     return WeaknessSummaryOut(user_id=user_id, **summary_data)
+
+
+# ---- Practice Sentences Endpoint ----
+
+@app.get("/practice/sentences/{user_id}", response_model=PracticeSentencesResponse)
+async def get_practice_sentences(
+    user_id: str,
+    count: int = Query(5, ge=1, le=20),
+    level: str = Query(None, regex="^(BEGINNER|INTERMEDIATE|ADVANCED)$")
+):
+    """
+    Returns personalized practice sentences based on user's pronunciation weaknesses.
+    
+    - **user_id**: User identifier
+    - **count**: Number of sentences to return (1-20, default 5)
+    - **level**: Override user's level (optional, auto-detected from user model if not provided)
+    
+    The endpoint:
+    1. Analyzes user's recent pronunciation errors
+    2. Identifies most problematic phonemes
+    3. Selects sentences that contain those phonemes
+    4. Returns 70% targeted + 30% general sentences for balanced practice
+    """
+    
+    # Determine user level
+    # TODO: In production, fetch from user model/database
+    # For now, use provided level or default to BEGINNER
+    user_level = level if level else "BEGINNER"
+    
+    # Get weakness analysis
+    weaknesses = await practice.analyze_user_weaknesses(user_id)
+    
+    # Select sentences
+    selected = await practice.select_practice_sentences(
+        user_id=user_id,
+        count=count,
+        user_level=user_level
+    )
+    
+    # Format response
+    sentences = [
+        practice.format_sentence_for_response(sent, i)
+        for i, sent in enumerate(selected)
+    ]
+    
+    # Determine selection strategy
+    strategy = "weakness_based" if weaknesses["weak_phonemes"] else "random"
+    
+    return PracticeSentencesResponse(
+        user_id=user_id,
+        sentences=sentences,
+        metadata={
+            "user_level": user_level,
+            "weak_phonemes": weaknesses["weak_phonemes"][:5],  # Top 5
+            "avg_per_sle": weaknesses["avg_per_sle"],
+            "total_attempts": weaknesses["total_attempts"],
+            "selection_strategy": strategy
+        }
+    )
 
 
 # ---- Grammar & Phoneme Endpoints ----
